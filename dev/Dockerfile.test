@@ -1,0 +1,13 @@
+# Home Assistant doesn't run on Windows; this image runs the tests on Linux.
+#   docker build -t style-studio-test -f dev/Dockerfile.test dev
+#   docker run --rm -v "$PWD:/src:ro" -v "$PWD/../Home assistant setting bar:/glass:ro" style-studio-test
+# The second mount is optional: with it, the tests also run against the real
+# Glass Sidebar integration.
+FROM python:3.14-slim
+RUN pip install -q --root-user-action=ignore pytest-homeassistant-custom-component
+COPY install-frontend.py /tmp/
+RUN python /tmp/install-frontend.py
+WORKDIR /w
+CMD cp -r /src/custom_components /src/tests /src/pytest.ini /w/ \
+ && if [ -d /glass/custom_components/glass_sidebar ]; then cp -r /glass/custom_components/glass_sidebar /w/custom_components/; fi \
+ && python -m pytest -q -p no:cacheprovider -rs

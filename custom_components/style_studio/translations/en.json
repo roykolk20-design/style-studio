@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Style Studio",
+        "description": "Adds the **Style** panel to the sidebar, where you set the look of Home Assistant without YAML or CSS. For the sidebar, Style Studio uses the Glass Sidebar plugin."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Style Studio is already set up."
+    }
+  }
+}

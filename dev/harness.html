@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Style Studio harness</title>
+<!--
+  A rough copy of HA's sidebar DOM plus a fake `hass`, to try the panel and
+  Glass Sidebar's runtime (from its own repository) without Home Assistant. Not a substitute for testing in HA.
+  Run: node dev/serve.mjs, then open http://localhost:8123/dev/harness.html
+  ?page=dark gives the page a dark background; ?glass=missing, not-added,
+  disabled or old shows how the panel handles Glass Sidebar's state.
+-->
+<style>
+  :root {
+    /* Close to "Licht Warm" */
+    --primary-background-color: #f4efe6;
+    --secondary-background-color: #ebe3d4;
+    --card-background-color: #fffaf2;
+    --primary-text-color: #3b3127;
+    --secondary-text-color: #7a6c5d;
+    --primary-color: #d99a1e;
+    --divider-color: #e2d6c3;
+    --sidebar-background-color: #fbf6ec;
+    --sidebar-selected-icon-color: #f59e0b;
+    --sidebar-selected-text-color: #b46f00;
+    --text-primary-color: #fff;
+  }
+  body { margin: 0; background: var(--primary-background-color); font-family: sans-serif; }
+</style>
+</head>
+<body>
+<home-assistant></home-assistant>
+<script type="module">
+  // Placeholder icons: a small square with the icon name as tooltip.
+  customElements.define("ha-icon", class extends HTMLElement {
+    set icon(value) { this.title = value; }
+    connectedCallback() {
+      this.style.cssText =
+        "display:inline-block;width:20px;height:20px;border-radius:5px;background:currentColor;opacity:.55;flex-shrink:0";
+    }
+  });
+
+  const params = new URLSearchParams(location.search);
+  const panels = {
+    lovelace: { url_path: "lovelace", title: null, icon: null },
+    "dashboard-plattegrond": { url_path: "dashboard-plattegrond", title: "Plattegrond", icon: "mdi:floor-plan" },
+    energy: { url_path: "energy", title: "energy", icon: "mdi:lightning-bolt" },
+    map: { url_path: "map", title: "map", icon: "mdi:map" },
+    logbook: { url_path: "logbook", title: "logbook", icon: "mdi:format-list-bulleted" },
+    history: { url_path: "history", title: "history", icon: "mdi:chart-box" },
+    "browser-mod": { url_path: "browser-mod", title: "Browser Mod", icon: "mdi:server" },
+    "style-studio": { url_path: "style-studio", title: "Stijl", icon: "mdi:palette-swatch-outline" },
+    config: { url_path: "config", title: "config", icon: "mdi:cog" },
+  };
+  const labels = {
+    "panel.states": "Overzicht", "panel.energy": "Energie", "panel.map": "Kaart",
+    "panel.logbook": "Logboek", "panel.history": "Geschiedenis", "panel.config": "Instellingen",
+  };
+
+  // Glass Sidebar's settings as the panel sees them. The fake backend keeps
+  // them in that shape; the accent is a hex color, which the runtime takes as is.
+  const glassSettings = {
+    floating: true, inset: 8, radius: 20, blur: 18, opacity: 74, highlight: "soft", accent: null,
+    hover_motion: true, glass_cards: false, mobile_width: 300, mobile_blur: true, mobile_text_size: 14,
+    categories: [
+      { name: "Dashboards", panels: ["dashboard-plattegrond", "energy"] },
+      { name: "Info", panels: ["logbook", "history", "map"] },
+    ],
+  };
+  // ?glass=missing | not-added | disabled | old
+  const glassState = params.get("glass");
+  const db = { sidebar: glassState === "missing" || glassState === "not-added" ? null : glassSettings, history: [] };
+  const listeners = [];
+  const push = () =>
+    listeners.forEach((cb) => cb(db.sidebar ? { enabled: true, version: "1.4.0", ...db.sidebar } : { enabled: false }));
+  window.__db = db;
+
+  const hass = {
+    language: "nl",
+    locale: { language: "nl" },
+    panels,
+    localize: (key) => labels[key] ?? "",
+    async callWS(msg) {
+      switch (msg.type) {
+        case "frontend/get_user_data":
+          return { value: { panelOrder: ["lovelace", "energy"], hiddenPanels: [] } };
+        case "style_studio/get":
+          return {
+            version: "0.1.0",
+            glass_sidebar: {
+              version: glassState === "missing" ? null : glassState === "old" ? "1.2.1" : "1.4.0",
+              min_version: "1.4.0",
+              added: Boolean(db.sidebar),
+              loaded: Boolean(db.sidebar) && glassState !== "disabled",
+              sidebar: db.sidebar,
+              history: db.history.length,
+            },
+          };
+        case "style_studio/sidebar/save":
+          db.history.push(db.sidebar);
+          db.sidebar = msg.sidebar;
+          push();
+          return { sidebar: msg.sidebar };
+        case "style_studio/sidebar/undo": {
+          if (!db.history.length) return { restored: false };
+          db.sidebar = db.history.pop();
+          push();
+          return { restored: true };
+        }
+      }
+      throw new Error(`unknown command ${msg.type}`);
+    },
+    connection: {
+      subscribeMessage(cb, msg) {
+        if (msg.type !== "glass_sidebar/subscribe") return Promise.reject(new Error(msg.type));
+        listeners.push(cb);
+        setTimeout(push);
+        return Promise.resolve(() => {});
+      },
+    },
+  };
+
+  // home-assistant > home-assistant-main > ha-drawer (.sidebar-shell, .app-content) + ha-sidebar
+  const ha = document.querySelector("home-assistant");
+  ha.hass = hass;
+  const main = document.createElement("home-assistant-main");
+  ha.attachShadow({ mode: "open" }).append(main);
+  const mainRoot = main.attachShadow({ mode: "open" });
+  // HA switches to a modal drawer below 870px.
+  const narrow = innerWidth <= 870;
+  main.toggleAttribute(narrow ? "modal" : "expanded", true);
+  mainRoot.innerHTML = `
+    <style>:host { display: block; --ha-sidebar-width: 256px; } ha-drawer { display: block; }</style>
+    <ha-drawer><ha-sidebar slot="sidebar" ${narrow ? "narrow" : ""} expanded></ha-sidebar>
+      <style-studio-panel></style-studio-panel></ha-drawer>`;
+
+  const drawer = mainRoot.querySelector("ha-drawer");
+  drawer.attachShadow({ mode: "open" }).innerHTML = `
+    <style>
+      .layout { display: flex; min-height: 100vh; }
+      .sidebar-shell {
+        width: var(--ha-sidebar-width); flex-shrink: 0; box-sizing: border-box; height: 100vh;
+        position: sticky; top: 0; border-inline-end: 1px solid var(--divider-color);
+      }
+      .app-content {
+        flex: 1; min-width: 0;
+        ${params.get("page") === "dark" ? "background: radial-gradient(circle at 70% 30%, #2b3440, #0d1117 70%);" : ""}
+      }
+    </style>
+    <div class="layout">
+      ${narrow ? "" : `<div class="sidebar-shell"><slot name="sidebar"></slot></div>`}
+      <div class="app-content"><slot></slot></div>
+    </div>`;
+
+  const sidebar = mainRoot.querySelector("ha-sidebar");
+  const order = ["lovelace", "energy", "dashboard-plattegrond", "map", "logbook", "history", "browser-mod", "style-studio"];
+  sidebar.attachShadow({ mode: "open" }).innerHTML = `
+    <style>
+      :host { display: flex; flex-direction: column; height: 100%; color: var(--primary-text-color); }
+      .menu { height: 56px; display: flex; align-items: center; padding: 0 16px; }
+      slot[name=main-navigation] { display: flex; flex-direction: column; }
+      ha-list-item-button {
+        display: flex; align-items: center; gap: 20px; height: 40px; padding: 0 12px; margin: 0 4px;
+        position: relative;
+      }
+      ha-list-item-button.selected::before { content: ""; position: absolute; inset: 0; }
+    </style>
+    <div class="menu">Home Assistant</div>
+    <ha-list-nav class="before-spacer"><slot name="main-navigation">
+      ${order.map((path) => `
+        <ha-list-item-button id="sidebar-panel-${path}" class="${path === "style-studio" ? "selected" : ""}">
+          <ha-icon slot="start"></ha-icon>
+          <span class="item-text">${labels[`panel.${panels[path].title}`] ?? panels[path].title ?? "Overzicht"}</span>
+        </ha-list-item-button>`).join("")}
+    </slot></ha-list-nav>`;
+
+  const panel = mainRoot.querySelector("style-studio-panel");
+  panel.narrow = narrow;
+  await import("/glass_sidebar/sidebar.js");
+  await import("/custom_components/style_studio/www/studio-panel.js");
+  panel.hass = hass;
+</script>
+</body>
+</html>

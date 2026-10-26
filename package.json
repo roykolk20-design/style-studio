@@ -1,0 +1,16 @@
+{
+  "name": "style-studio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild frontend/src/studio-panel.js --bundle --format=esm --minify --target=es2021 --outfile=custom_components/style_studio/www/studio-panel.js",
+    "watch": "npm run build -- --watch",
+    "check": "node dev/check-version.mjs",
+    "smoke": "node dev/smoke.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "lit": "^3.3.0",
+    "playwright-core": "^1.64.1"
+  }
+}

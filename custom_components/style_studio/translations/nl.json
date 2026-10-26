@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Style Studio",
+        "description": "Voegt het paneel **Stijl** toe aan de zijbalk. Daar stel je het uiterlijk van Home Assistant in zonder YAML of CSS. Voor de zijbalk gebruikt Style Studio de plugin Glass Sidebar."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Style Studio is al ingesteld."
+    }
+  }
+}

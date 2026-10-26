@@ -1,0 +1,6 @@
+node_modules/
+__pycache__/
+*.pyc
+
+# Copied in by CI and the test image
+custom_components/glass_sidebar/
