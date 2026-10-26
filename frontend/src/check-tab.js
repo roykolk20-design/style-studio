@@ -160,12 +160,34 @@ class CheckTab extends TabBase {
 
   _checksCard() {
     const c = this._check;
-    const sidebarCardMod = c.card_mod_themes.filter((t) => t.sidebar);
-    const otherCardMod = c.card_mod_themes.filter((t) => !t.sidebar);
-    // Devices seen in the last two weeks; older ones are likely not used.
+    // Only themes someone uses can get in the way.
+    const used = c.card_mod_themes.filter((t) => t.in_use);
+    const unused = c.card_mod_themes.filter((t) => !t.in_use);
+    const sidebarCardMod = used.filter((t) => t.sidebar);
+    const otherCardMod = used.filter((t) => !t.sidebar);
+
+    // A device seen before this version started simply hasn't opened Home
+    // Assistant since; it loads the new files by itself. Only one that
+    // reported an old version afterwards keeps old files.
+    const since = c.version_since ? new Date(c.version_since).getTime() : 0;
     const recent = Date.now() - 14 * 24 * 3600 * 1000;
-    const old = c.devices.filter((d) => d.version !== c.version && new Date(d.at).getTime() > recent);
+    const behind = c.devices.filter((d) => d.version !== c.version && new Date(d.at).getTime() > recent);
+    const stale = behind.filter((d) => new Date(d.at).getTime() > since);
+    const waiting = behind.filter((d) => new Date(d.at).getTime() <= since);
     const browserMod = readStorage(BROWSER_MOD_KEY) === "true";
+    const deviceList = (devices) => html`<ul>
+      ${devices.map(
+        (d) => html`<li>
+          ${this.t("ck_device", {
+            user: d.user,
+            kind: d.app ? this.t("ck_app") : this.t("ck_browser"),
+            version: d.version,
+            when: this._when(d.at),
+          })}
+        </li>`
+      )}
+    </ul>`;
+
     return html`
       <div class="card">
         <div class="title-row">
@@ -176,15 +198,26 @@ class CheckTab extends TabBase {
         </div>
         ${sidebarCardMod.length
           ? sidebarCardMod.map((t) =>
-              this._item(
-                !c.glass_sidebar,
-                this.t("ck_cardmod_sidebar", { theme: t.theme, keys: t.keys.join(", ") })
-              )
+              c.glass_handles_themes
+                ? this._item(true, this.t("ck_cardmod_handled", { theme: t.theme }))
+                : this._item(
+                    !c.glass_sidebar,
+                    this.t("ck_cardmod_sidebar", { theme: t.theme, keys: t.keys.join(", ") })
+                  )
             )
           : this._item(true, this.t("ck_no_cardmod"))}
         ${otherCardMod.map((t) =>
           this._item(true, this.t("ck_cardmod_other", { theme: t.theme, keys: t.keys.join(", ") }))
         )}
+        ${unused.length
+          ? this._item(
+              true,
+              this.t(unused.length === 1 ? "ck_cardmod_unused_one" : "ck_cardmod_unused", {
+                count: unused.length,
+                names: unused.map((t) => t.theme).join(", "),
+              })
+            )
+          : nothing}
         ${browserMod
           ? this._item(
               false,
@@ -195,25 +228,16 @@ class CheckTab extends TabBase {
         ${c.themes_not_loaded.length
           ? this._item(false, this.t("ck_not_loaded", { names: c.themes_not_loaded.join(", ") }))
           : this._item(true, this.t("ck_loaded"))}
-        ${old.length
+        ${stale.length
           ? this._item(
               false,
-              html`${this.t("ck_devices_old")}
-                <ul>
-                  ${old.map(
-                    (d) => html`<li>
-                      ${this.t("ck_device", {
-                        user: d.user,
-                        kind: d.app ? this.t("ck_app") : this.t("ck_browser"),
-                        version: d.version,
-                        when: this._when(d.at),
-                      })}
-                    </li>`
-                  )}
-                </ul>
+              html`${this.t("ck_devices_old")} ${deviceList(stale)}
                 <small>${this.t("ck_app_cache")}</small>`
             )
-          : this._item(true, this.t("ck_devices_ok", { version: c.version }))}
+          : this._item(true, waiting.length ? this.t("ck_devices_none_old") : this.t("ck_devices_ok", { version: c.version }))}
+        ${waiting.length
+          ? this._item(true, html`${this.t("ck_devices_waiting", { version: c.version })} ${deviceList(waiting)}`)
+          : nothing}
       </div>
     `;
   }

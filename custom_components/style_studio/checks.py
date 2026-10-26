@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from awesomeversion import AwesomeVersion
 import voluptuous as vol
 
 from homeassistant.components import websocket_api
@@ -13,7 +14,14 @@ from .const import DOMAIN, VERSION
 from .glass import GLASS_DOMAIN, glass_entry
 from .people import PEOPLE, SIGNAL_PERSONS
 from .store import StyleStore
-from .themes import ForeignFileError, ReloadError, async_write_themes, loaded_themes, theme_layout
+from .themes import (
+    ForeignFileError,
+    ReloadError,
+    async_write_themes,
+    default_theme,
+    loaded_themes,
+    theme_layout,
+)
 
 THEMES = "themes"
 KEYS = (THEMES, GLASS_DOMAIN, PEOPLE)
@@ -51,10 +59,17 @@ async def ws_check(
     store = _store(hass)
     loaded = loaded_themes(hass)
     try:
-        await async_get_integration(hass, GLASS_DOMAIN)
-        glass_installed = True
+        glass_version = (await async_get_integration(hass, GLASS_DOMAIN)).version
     except IntegrationNotFound:
-        glass_installed = False
+        glass_version = None
+    # Glass Sidebar 1.4 switches off a theme's own sidebar styling.
+    glass_handles_themes = glass_version is not None and glass_version >= AwesomeVersion("1.4.0")
+
+    # Only themes someone uses matter: the default, what devices report, and
+    # what Per persoon sets. Installed but unused themes do nothing.
+    in_use = {default_theme(hass)} | {r.get("theme") for r in store.reports.values()}
+    in_use |= {person.get("theme") for person in store.persons.values()}
+    in_use.discard(None)
 
     users = {user.id: user.name for user in await hass.auth.async_get_users()}
     layout = await hass.async_add_executor_job(theme_layout, hass)
@@ -62,16 +77,21 @@ async def ws_check(
         msg["id"],
         {
             "version": VERSION,
-            "glass_sidebar": glass_installed and glass_entry(hass) is not None,
+            "glass_sidebar": glass_version is not None and glass_entry(hass) is not None,
+            "glass_handles_themes": glass_handles_themes,
             "card_mod_themes": [
                 {
                     "theme": name,
                     "keys": keys,
                     "sidebar": any(key in SIDEBAR_CARD_MOD for key in keys),
+                    "in_use": name in in_use,
                 }
                 for name, theme in sorted(loaded.items())
                 if (keys := _card_mod_keys(theme))
             ],
+            # When this version started; devices not seen since haven't had
+            # a chance to load it yet.
+            "version_since": store.version_since,
             "themes_layout": layout.mode if layout.found else None,
             "themes_not_loaded": [
                 theme["name"] for theme in store.themes if theme["name"] not in loaded

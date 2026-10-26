@@ -3,7 +3,7 @@
 # Style Studio for Home Assistant
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
-![Version](https://img.shields.io/badge/version-0.6.0-F59E0B)
+![Version](https://img.shields.io/badge/version-0.6.1-F59E0B)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.10%2B-18BCF2)
 
 Set the look of your whole Home Assistant from one panel: menu, top bar, cards,

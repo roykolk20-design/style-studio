@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.1]
+
+### Fixed
+
+- Check and restore warned about every installed theme with card-mod, also
+  ones nobody uses. Now only themes in use count (the default theme, what
+  devices report, and what Per persoon sets). With Glass Sidebar 1.4 or newer,
+  which switches off a theme's own sidebar styling, it is a note, not a
+  warning; unused themes are listed in one line.
+- Devices that haven't opened Home Assistant since an update were listed as
+  using old files. Style Studio now remembers when a version started; those
+  devices are listed apart, and only a device that reports an old version
+  after the update counts as a problem.
+
 ## [0.6.0]
 
 ### New

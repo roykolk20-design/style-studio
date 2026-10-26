@@ -321,7 +321,13 @@ const nl = {
   ck_cardmod_sidebar:
     "Thema {theme} maakt met card-mod de zijbalk of de hele app op ({keys}). Dat botst met Glass Sidebar. Haal die regels uit het thema.",
   ck_cardmod_other: "Thema {theme} gebruikt card-mod ({keys}). Dat werkt naast Style Studio, maar die stijlen volgen de kleuren hier niet.",
-  ck_no_cardmod: "Geen card-mod-stijlen voor de zijbalk in je thema's.",
+  ck_no_cardmod: "Geen card-mod-stijlen voor de zijbalk in de thema's die in gebruik zijn.",
+  ck_cardmod_handled:
+    "Thema {theme} maakt ook de zijbalk op met card-mod. Glass Sidebar zet dat deel uit; de rest van het thema werkt gewoon.",
+  ck_cardmod_unused: "{count} andere geïnstalleerde thema's gebruiken card-mod, maar niemand gebruikt ze nu: {names}.",
+  ck_cardmod_unused_one: "Nog een geïnstalleerd thema gebruikt card-mod, maar niemand gebruikt het nu: {names}.",
+  ck_devices_none_old: "Geen apparaat gebruikt na de update nog oude bestanden.",
+  ck_devices_waiting: "Nog niet geopend sinds de update naar {version}; ze laden de nieuwe bestanden vanzelf zodra Home Assistant opent:",
   ck_browser_mod:
     "Browser Mod denkt in deze browser dat hij het standaarddashboard beheert (default_dashboard_plugin_conflict).",
   ck_browser_mod_ok: "Geen Browser Mod-conflict in deze browser.",
@@ -331,7 +337,7 @@ const nl = {
   ck_not_loaded: "Thema's die Home Assistant niet laadt: {names}. Zet in configuration.yaml: frontend: themes: !include_dir_merge_named themes.",
   ck_loaded: "Alle thema's van Style Studio zijn geladen.",
   ck_devices_ok: "Alle apparaten gebruiken versie {version}.",
-  ck_devices_old: "Apparaten met oude bestanden:",
+  ck_devices_old: "Deze apparaten openden Home Assistant na de update, maar gebruiken nog oude bestanden:",
   ck_device: "{user} · {kind} · {version} · {when}",
   ck_app: "Companion-app",
   ck_browser: "browser",
@@ -683,7 +689,13 @@ const en = {
   ck_cardmod_sidebar:
     "Theme {theme} styles the sidebar or the whole app with card-mod ({keys}). That clashes with Glass Sidebar. Remove those lines from the theme.",
   ck_cardmod_other: "Theme {theme} uses card-mod ({keys}). That works next to Style Studio, but those styles don't follow the colors here.",
-  ck_no_cardmod: "No card-mod sidebar styles in your themes.",
+  ck_no_cardmod: "No card-mod sidebar styles in the themes in use.",
+  ck_cardmod_handled:
+    "Theme {theme} also styles the sidebar with card-mod. Glass Sidebar switches that part off; the rest of the theme just works.",
+  ck_cardmod_unused: "{count} other installed themes use card-mod, but nobody uses them now: {names}.",
+  ck_cardmod_unused_one: "One more installed theme uses card-mod, but nobody uses it now: {names}.",
+  ck_devices_none_old: "No device still uses old files after the update.",
+  ck_devices_waiting: "Not opened since the update to {version}; they load the new files by themselves once Home Assistant opens:",
   ck_browser_mod:
     "Browser Mod thinks it manages the default dashboard in this browser (default_dashboard_plugin_conflict).",
   ck_browser_mod_ok: "No Browser Mod conflict in this browser.",
@@ -693,7 +705,7 @@ const en = {
   ck_not_loaded: "Themes Home Assistant doesn't load: {names}. Add to configuration.yaml: frontend: themes: !include_dir_merge_named themes.",
   ck_loaded: "All Style Studio themes are loaded.",
   ck_devices_ok: "All devices run version {version}.",
-  ck_devices_old: "Devices with old files:",
+  ck_devices_old: "These devices opened Home Assistant after the update but still use old files:",
   ck_device: "{user} · {kind} · {version} · {when}",
   ck_app: "Companion app",
   ck_browser: "browser",

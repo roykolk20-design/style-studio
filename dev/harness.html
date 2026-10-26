@@ -267,7 +267,13 @@
           return {
             version: VERSION,
             glass_sidebar: true,
-            card_mod_themes: [{ theme: "Licht Warm", keys: ["card-mod-sidebar", "card-mod-theme"], sidebar: true }],
+            glass_handles_themes: false,
+            card_mod_themes: [
+              { theme: "Licht Warm", keys: ["card-mod-sidebar", "card-mod-theme"], sidebar: true, in_use: true },
+              { theme: "Frosted Glass", keys: ["card-mod-root", "card-mod-sidebar"], sidebar: true, in_use: false },
+            ],
+            // This version started just now; Joyce's phone was seen before.
+            version_since: new Date(Date.now() - 60e3).toISOString(),
             themes_not_loaded: [],
             devices: Object.values(reports).map((r) => ({ ...r, user: users.find((u) => u.id === r.user_id)?.name })),
           };

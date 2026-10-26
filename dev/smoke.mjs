@@ -456,7 +456,10 @@ for (const width of [430, 1920]) {
   const { ctx, tab, panel, errors } = await open(1920, "", "Controle en herstel");
   const checkTab = panel.locator("ss-check-tab");
   check((await checkTab.getByText(/card-mod de zijbalk/).count()) === 1, "card-mod sidebar theme flagged");
-  check((await checkTab.getByText(/Joyce · Companion-app · 0.1.0/).count()) === 1, "old app version flagged per device");
+  check((await checkTab.getByText(/card-mod de zijbalk/).count()) === 1, "only themes in use are flagged");
+  check((await checkTab.getByText(/niemand gebruikt (ze|het) nu: Frosted Glass/).count()) === 1, "unused themes in one line");
+  check((await checkTab.getByText(/Joyce · Companion-app · 0.1.0/).count()) === 1, "device listed");
+  check((await checkTab.getByText(/Nog niet geopend sinds de update/).count()) === 1, "not opened since the update is no warning");
 
   // Browser Mod's leftover setting in this browser.
   await tab.evaluate(() => localStorage.setItem("isDefaultPanelManaged", "true"));

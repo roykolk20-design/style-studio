@@ -42,10 +42,25 @@ async def test_check_and_restore(hass, hass_ws_client, tmp_path: Path) -> None:
 
     check = (await _send(client, type="style_studio/check"))["result"]
     assert check["version"] == VERSION
+    # Installed but nobody uses it: reported, but not as a problem.
     assert check["card_mod_themes"] == [
-        {"theme": "Licht Warm", "keys": ["card-mod-sidebar", "card-mod-theme"], "sidebar": True}
+        {
+            "theme": "Licht Warm",
+            "keys": ["card-mod-sidebar", "card-mod-theme"],
+            "sidebar": True,
+            "in_use": False,
+        }
     ]
+    # True with Glass Sidebar 1.4+ next to it (the Docker image adds it when mounted).
+    has_glass = (Path(__file__).parents[1] / "custom_components" / "glass_sidebar").is_dir()
+    assert check["glass_handles_themes"] is has_glass
+    assert check["version_since"]
     assert check["themes_not_loaded"] == []
+
+    # As the default theme it is in use.
+    await hass.services.async_call("frontend", "set_theme", {"name": "Licht Warm"}, blocking=True)
+    check = (await _send(client, type="style_studio/check"))["result"]
+    assert check["card_mod_themes"][0]["in_use"] is True
 
     # Two saves keep two versions; restoring the newer one brings back "Joyce".
     first = (await _send(client, type="style_studio/themes/save", theme=THEME))["result"]["theme"]

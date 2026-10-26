@@ -6,7 +6,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
-from .const import HISTORY_LIMIT, STORAGE_KEY, STORAGE_VERSION
+from .const import HISTORY_LIMIT, STORAGE_KEY, STORAGE_VERSION, VERSION
 
 # Stored layout:
 # {
@@ -27,6 +27,15 @@ class StyleStore:
         self._data.setdefault("themes", [])
         self._data.setdefault("persons", {})
         self._data.setdefault("reports", {})
+        # Remember when this version first started.
+        if self._data.get("version") != VERSION:
+            self._data["version"] = VERSION
+            self._data["version_since"] = datetime.now(timezone.utc).isoformat()
+            await self._store.async_save(self._data)
+
+    @property
+    def version_since(self) -> str | None:
+        return self._data.get("version_since")
 
     @property
     def themes(self) -> list[dict[str, Any]]:
