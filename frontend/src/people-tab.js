@@ -139,25 +139,6 @@ class PeopleTab extends TabBase {
                 : this.t("never_seen")}
             </small>
           </div>
-          <label class="copy">
-            <span>${this.t("copy_all_from")}</span>
-            <select
-              aria-label="${this.t("copy_all_from")} (${user.name})"
-              @change=${(ev) => {
-                const from = ev.target.value;
-                ev.target.value = "";
-                if (!from) return;
-                const source = this._draft[from];
-                this._setPerson(user.id, {
-                  theme: source.theme ?? this._latest(from)?.theme ?? null,
-                  sidebar: clone(source.sidebar ?? this._latest(from)?.sidebar ?? null),
-                });
-              }}
-            >
-              <option value="">${this.t("pick_person")}</option>
-              ${others.map((other) => html`<option value=${other.id}>${other.name}</option>`)}
-            </select>
-          </label>
         </div>
 
         <div class="row">
@@ -176,6 +157,7 @@ class PeopleTab extends TabBase {
           </select>
         </div>
 
+        ${this._more(html`
         <div class="row">
           <span>
             ${this.t("person_sidebar")}
@@ -200,6 +182,26 @@ class PeopleTab extends TabBase {
               : nothing}
           </select>
         </div>
+          <label class="row copy">
+            <span>${this.t("copy_all_from")}</span>
+            <select
+              aria-label="${this.t("copy_all_from")} (${user.name})"
+              @change=${(ev) => {
+                const from = ev.target.value;
+                ev.target.value = "";
+                if (!from) return;
+                const source = this._draft[from];
+                this._setPerson(user.id, {
+                  theme: source.theme ?? this._latest(from)?.theme ?? null,
+                  sidebar: clone(source.sidebar ?? this._latest(from)?.sidebar ?? null),
+                });
+              }}
+            >
+              <option value="">${this.t("pick_person")}</option>
+              ${others.map((other) => html`<option value=${other.id}>${other.name}</option>`)}
+            </select>
+          </label>
+        `)}
       </div>
     `;
   }

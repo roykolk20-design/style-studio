@@ -40,30 +40,46 @@ const panel = page.locator("style-studio-panel");
 await panel.locator("nav.tabs").waitFor({ timeout: 60000 });
 await panel.locator("nav.tabs").getByRole("button", { name: "Kamers en pop-ups" }).click();
 const rooms = panel.locator("ss-rooms-tab");
-await rooms.locator(".chip").first().waitFor();
-await page.waitForTimeout(3000);
-const chips = (await rooms.locator(".chip").allInnerTexts()).map((c) => c.trim());
-console.log("rooms:", chips.join(", "));
-check(["Keuken", "Slaapkamer", "Woonkamer"].every((name) => chips.includes(name)), "hand-made rooms found");
+const next = () => rooms.getByRole("button", { name: "Volgende" }).click();
+const yes = () => rooms.getByRole("button", { name: "Ja" }).click();
+await rooms.locator(".choice").first().waitFor();
+await page.waitForTimeout(2000);
+await shot(page, "real-rooms-start");
 
-await rooms.locator(".chip", { hasText: "Woonkamer" }).click();
+// Change the hand-made living room, step by step.
+await rooms.locator('[data-choice="edit"]').click();
+const tiles = (await rooms.locator(".tile").allInnerTexts()).map((c) => c.trim());
+console.log("rooms:", tiles.join(", "));
+check(["Keuken", "Slaapkamer", "Woonkamer"].every((name) => tiles.includes(name)), "hand-made rooms found");
+await rooms.locator(".tile", { hasText: "Woonkamer" }).click();
 await page.waitForTimeout(2000);
 check((await rooms.getByText("Echte kaarten; de knoppen werken echt").count()) >= 1, "preview uses the real cards");
-check(await rooms.getByRole("checkbox", { name: "Ceiling Lights" }).isChecked(), "lights read from the pop-up");
-await shot(page, "real-rooms-tab");
-
+await next();
 await rooms.getByRole("textbox", { name: "Naam" }).fill("Huiskamer");
+await rooms.getByRole("button", { name: "Ander icoon kiezen" }).click();
+await rooms.locator("ss-icon-picker").getByRole("searchbox").fill("bath");
+await page.waitForTimeout(800);
+check((await rooms.locator("ss-icon-picker").getByRole("button", { name: "bathtub", exact: true }).count()) === 1, "icon search uses Home Assistant's icon list");
+await rooms.locator("ss-icon-picker").getByRole("button", { name: "sofa-outline", exact: true }).click().catch(async () => {
+  await rooms.locator("ss-icon-picker").getByRole("searchbox").fill("sofa");
+  await rooms.locator("ss-icon-picker").getByRole("button", { name: "sofa-outline", exact: true }).click();
+});
+await next();
+check(await rooms.getByRole("checkbox", { name: "Ceiling Lights" }).isChecked(), "lights read from the pop-up");
 await rooms.getByRole("checkbox", { name: "Ceiling Lights" }).uncheck();
 await rooms.getByRole("checkbox", { name: "Office RGBW Lights" }).check();
 await page.waitForTimeout(1500);
 await shot(page, "real-rooms-edit");
-await rooms.getByRole("button", { name: "Wijzigingen opslaan" }).click();
-await rooms.getByRole("button", { name: "Ja" }).click();
+await next(); // lights
+await next(); // air conditioning
+await rooms.getByRole("button", { name: "Opslaan", exact: true }).click();
+await yes();
 await page.waitForTimeout(3000);
 
 let config = await dashboard();
 const ground = config.views[0].sections[1].cards;
 check(ground[1].name.includes("const NAME='Huiskamer'") && ground[1].name.includes('"light.office_rgbw_lights"'), "tile changed in place");
+check(ground[1].name.includes("const ICON='mdi:sofa-outline'"), "icon from the picker");
 check(ground[1].styles.card[0]["border-radius"] === "24px", "tile design kept");
 const popupLights = ground[2].cards.slice(1).map((c) => c.entity);
 check(
@@ -72,13 +88,19 @@ check(
   `pop-up lights changed, design kept (${popupLights})`
 );
 
-// A new room, in Bubble Card's new pop-up format, into "1e verdieping".
-await rooms.getByRole("button", { name: "Kamer toevoegen" }).click();
+// A new room by hand, under "1e verdieping", like the rooms already there.
+await rooms.locator('[data-choice="add"]').click();
+await rooms.getByRole("combobox", { name: "Onder welk kopje" }).selectOption({ label: "1e verdieping" });
+await next();
+await rooms.locator(".tile", { hasText: "Een andere kamer" }).click();
+await next();
 await rooms.getByRole("textbox", { name: "Naam" }).fill("Kantoor");
+await next();
 await rooms.getByRole("checkbox", { name: "Office RGBW Lights" }).check();
-await rooms.getByRole("combobox", { name: "Sectie" }).first().selectOption({ label: "1e verdieping" });
+await next();
+await next();
 await rooms.getByRole("button", { name: "Op dashboard zetten" }).click();
-await rooms.getByRole("button", { name: "Ja" }).click();
+await yes();
 await page.waitForTimeout(3000);
 config = await dashboard();
 const officeCards = config.views[0].sections[2].cards;
@@ -86,9 +108,12 @@ const officeTile = officeCards.find((c) => c.tap_action?.navigation_path === "#l
 check(officeTile?.styles?.card?.[0]?.["border-radius"] === "24px", "new room looks like the rooms already there");
 check(officeCards.some((c) => c.type === "vertical-stack" && c.cards[0].hash === "#l-kantoor" && c.cards[1].button_type === "slider"), "with a pop-up like theirs");
 
-// Other cards: a greeting at the top.
+// Another card: a greeting at the top.
+await rooms.locator('[data-choice="card"]').click();
+await rooms.locator('[data-card="greeting"]').click();
+await next();
 await rooms.getByRole("button", { name: "Toevoegen", exact: true }).click();
-await rooms.getByRole("button", { name: "Ja" }).click();
+await yes();
 await page.waitForTimeout(2000);
 config = await dashboard();
 check(config.views[0].sections[0].cards.some((c) => c.type === "markdown"), "greeting added");

@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.0]
+
+### Changed
+
+- **Step by step.** Every tab starts with "Wat wil je doen?" and a few big
+  buttons, then short numbered steps with only the current one open, the
+  preview beside it, and plain words (page, under which heading). Settings
+  most people never need moved under "Meer opties".
+  - Themes: change my theme, make a new one, or use one (for me, or as the
+    default for everyone).
+  - Rooms: change a room, add a room, add a card, or make a whole page.
+  - Climate: which air conditioner, what goes in it, where.
+  - Sidebar: shape, glass, active page, phone, groups.
+  - Per person: just the theme; sidebar order and copying under "Meer opties".
+
+### New
+
+- **Icon picker**: room and device icons in a grid, with search in Dutch and
+  English and through every icon Home Assistant has.
+
 ## [0.6.1]
 
 ### Fixed

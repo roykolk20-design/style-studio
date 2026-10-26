@@ -36,7 +36,8 @@ class ThemesTab extends TabBase {
     _wholeScreen: { state: true },
     _popup: { state: true },
     _newVar: { state: true },
-    _leaving: { state: true },
+    _mode: { state: true },
+    _step: { state: true },
   };
 
   constructor() {
@@ -48,6 +49,8 @@ class ThemesTab extends TabBase {
     this._popup = true;
     this._newVar = { key: "", value: "" };
     this._applied = null;
+    this._mode = null;
+    this._step = 0;
   }
 
   connectedCallback() {
@@ -89,9 +92,7 @@ class ThemesTab extends TabBase {
   async _load(select) {
     try {
       this._state = await this.hass.callWS({ type: "style_studio/themes/get" });
-      this._select(select ?? this._selected ?? this._state.themes[0]?.id ?? null);
-      // The first time, start from what you use now instead of something new.
-      if (!this._state.themes.length && this._selected === null) this._startFromCurrent();
+      if (select) this._select(select);
     } catch (err) {
       this._error(err);
     }
@@ -181,11 +182,6 @@ class ThemesTab extends TabBase {
     this._toast = null;
   }
 
-  _cancel() {
-    if (this._selected === NEW) this._select(this._state.themes[0]?.id ?? null);
-    else this._select(this._selected);
-  }
-
   _save() {
     const theme = { ...this._draft, vars: themeVars(this._draft) };
     if (this._selected !== NEW) theme.id = this._selected;
@@ -195,6 +191,8 @@ class ThemesTab extends TabBase {
         this._wholeScreen = false;
         this._state = result;
         this._select(result.theme.id);
+        // Saved: next, use it.
+        this._mode = "use";
       } catch (err) {
         throw this._known(err);
       }
@@ -218,7 +216,8 @@ class ThemesTab extends TabBase {
           type: "style_studio/themes/delete",
           theme_id: this._selected,
         });
-        this._select(this._state.themes[0]?.id ?? null);
+        this._select(null);
+        this._mode = null;
       }, this.t("deleted"))
     );
   }
@@ -234,93 +233,324 @@ class ThemesTab extends TabBase {
     );
   }
 
-  _setDefault() {
-    const name = this._saved.name;
+  _setDefault(name = this._saved.name) {
     this._run(async () => {
       this._state = await this.hass.callWS({ type: "style_studio/themes/set_default", name });
     }, this.t("default_set", { name }));
   }
 
+  _begin(mode) {
+    this._mode = mode;
+    this._step = 0;
+    this._select(null);
+    this._toast = null;
+    if (mode === "new") this._startFromCurrent();
+  }
+
+  _home() {
+    const go = () => {
+      this._wholeScreen = false;
+      this._select(null);
+      this._mode = null;
+    };
+    if (this.dirty) this._ask(this.t("discard_confirm"), go);
+    else go();
+  }
+
   render() {
     if (!this._state) return nothing;
+    if (!this._mode) return this._startScreen();
+    if (this._mode === "use") {
+      return html`${this._back(this.t("back"), () => this._home())} ${this._useList()} ${this._bar({ canSave: false })}`;
+    }
+    return html`
+      ${this._back(this.t("back"), () => this._home())}
+      <div class="layout">
+        <div>${this._flow()}</div>
+        ${this._draft ? this._previewCard() : html`<aside class="card preview"><p class="hint">${this.t("st_which_theme")}</p></aside>`}
+      </div>
+      ${this._bar({ canSave: false })}
+    `;
+  }
+
+  _startScreen() {
+    const items = [];
+    if (this._state.themes.length) {
+      items.push({ key: "edit", icon: "mdi:palette-outline", title: this.t("th_do_edit"), text: this.t("th_do_edit_text") });
+    }
+    items.push(
+      { key: "new", icon: "mdi:plus-circle-outline", title: this.t("th_do_new"), text: this.t("th_do_new_text") },
+      { key: "use", icon: "mdi:account-check-outline", title: this.t("th_do_use"), text: this.t("th_do_use_text") }
+    );
     return html`
       <p class="intro">${this.t("themes_intro")}</p>
-      ${this._list()}
-      ${this._leavingQuestion()}
-      ${this._picking ? this._picker() : nothing}
-      ${this._draft ? this._editor() : nothing}
+      ${this._choices(this.t("what_to_do"), items, (mode) => this._begin(mode))}
       ${this._bar({
-        left: this._barButtons(),
-        onCancel: () => this._cancel(),
-        onSave: () => this._save(),
-        canSave: (this._selected === NEW || this.dirty) && this._nameOk,
+        left: this._state.history
+          ? html`<button ?disabled=${this._busy} @click=${this._undo}>
+              <ha-icon icon="mdi:history"></ha-icon>${this.t("undo")}
+            </button>`
+          : nothing,
+        canSave: false,
       })}
     `;
   }
 
-  _list() {
-    const { themes, loaded, default_theme: fallback } = this._state;
-    return html`
-      <div class="chips">
-        ${themes.map(
-          (theme) => html`<button
-            class="chip ${theme.id === this._selected ? "active" : ""}"
-            @click=${() => this._pick(() => this._select(theme.id))}
-          >
-            <span class="swatch" style="background:${theme.vars["primary-color"]}"></span>
-            ${theme.name}
-            ${theme.name === fallback ? html`<em>${this.t("badge_default")}</em>` : nothing}
-            ${loaded.includes(theme.name)
-              ? nothing
-              : html`<em class="bad">${this.t("badge_not_loaded")}</em>`}
-          </button>`
-        )}
-        ${this._selected === NEW
-          ? html`<button class="chip active">${this._draft.name}</button>`
-          : nothing}
-        <button
-          class="chip add ${this._picking ? "active" : ""}"
-          @click=${() =>
-            this._pick(() => {
-              this._picking = true;
-              this._selected = null;
-              this._draft = null;
-            })}
+  _flow() {
+    const go = (step) => (this._step = step);
+    const d = this._draft;
+    const first =
+      this._mode === "edit"
+        ? { title: this.t("st_which_theme"), summary: d?.name, ready: Boolean(d), content: this._themeTiles() }
+        : { title: this.t("start_from"), summary: d?.name, ready: Boolean(d), content: this._picker() };
+    if (!d) return this._steps([first], 0, go);
+    const b = { ...BASE_DEFAULTS, ...d.base };
+    const saved = this._selected !== NEW ? this._saved : null;
+    const steps = [
+      first,
+      { title: this.t("st_colors"), content: this._colors(b) },
+      { title: this.t("st_shape"), content: this._shape(b) },
+      {
+        title: this.t("st_name_save"),
+        content: html`
+          ${saved && !this._state.loaded.includes(saved.name) ? this._warning(this.t("warn_not_loaded")) : nothing}
+          <label class="row">
+            <span>${this.t("theme_name")}</span>
+            <input
+              type="text"
+              class="name"
+              maxlength="50"
+              .value=${d.name}
+              @input=${(ev) => {
+                this._draft = { ...this._draft, name: ev.target.value };
+              }}
+            />
+          </label>
+          ${this._nameOk ? nothing : html`<p class="hint bad">${this.t("err_bad_name")}</p>`}
+          ${this._more(html`${this._allVars()}
+            ${saved
+              ? html`<button class="small danger" ?disabled=${this._busy} @click=${this._delete}>
+                  <ha-icon icon="mdi:delete-outline"></ha-icon>${this.t("delete_theme")}
+                </button>`
+              : nothing}`)}
+        `,
+      },
+    ];
+    return this._steps(
+      steps,
+      this._step,
+      go,
+      html`<button class="primary next" ?disabled=${this._busy || !this._nameOk} @click=${() => this._save()}>
+        ${this.t("save")}
+      </button>`
+    );
+  }
+
+  _themeTiles() {
+    const { themes, loaded } = this._state;
+    return html`<div class="chips">
+      ${themes.map(
+        (theme) => html`<button
+          class="chip ${theme.id === this._selected ? "active" : ""}"
+          @click=${() => this._select(theme.id)}
         >
-          <ha-icon icon="mdi:plus"></ha-icon>${this.t("new_theme")}
+          <span class="swatch" style="background:${theme.vars["primary-color"]}"></span>
+          ${theme.name}
+          ${loaded.includes(theme.name) ? nothing : html`<em class="bad">${this.t("badge_not_loaded")}</em>`}
+        </button>`
+      )}
+    </div>`;
+  }
+
+  _colors(b) {
+    const derived = derive(b);
+    return html`
+      ${this._fixedNotice()}
+      ${this._color(b, "background", this.t("c_background"))}
+      ${this._color(b, "card", this.t("c_card"))}
+      ${this._color(b, "text", this.t("c_text"))}
+      ${this._color(b, "accent", this.t("c_accent"))}
+      ${this._color(b, "sidebar", this.t("c_sidebar"))}
+      <label class="row">
+        <span>
+          ${this.t("c_icons")}
+          <small>${this.t("c_icons_hint")}</small>
+        </span>
+        <span class="inline">
+          ${b.icon
+            ? html`<input
+                type="color"
+                aria-label=${this.t("c_icons")}
+                .value=${b.icon}
+                @input=${(ev) => this._set("icon", ev.target.value)}
+              />`
+            : nothing}
+          <input
+            type="checkbox"
+            class="switch"
+            aria-label=${this.t("c_icons_own")}
+            .checked=${Boolean(b.icon)}
+            @change=${(ev) => this._set("icon", ev.target.checked ? derived["state-icon-color"] : null)}
+          />
+        </span>
+      </label>
+      <label class="row">
+        <span>${this.t("header_same")}</span>
+        <span class="inline">
+          ${b.header
+            ? html`<input
+                type="color"
+                aria-label=${this.t("c_header")}
+                .value=${b.header}
+                @input=${(ev) => this._set("header", ev.target.value)}
+              />`
+            : nothing}
+          <input
+            type="checkbox"
+            class="switch"
+            .checked=${!b.header}
+            @change=${(ev) => this._set("header", ev.target.checked ? null : b.background)}
+          />
+        </span>
+      </label>
+    `;
+  }
+
+  _shape(b) {
+    return html`
+      ${this._slider(b, "radius", this.t("corners"), 0, 28, "px")}
+      <div class="row">
+        <span>${this.t("shadow")}</span>
+        ${this._segment(b, "shadow", [
+          ["none", this.t("shadow_none")],
+          ["soft", this.t("shadow_soft")],
+          ["strong", this.t("shadow_strong")],
+        ])}
+      </div>
+      ${this._slider(b, "card_opacity", this.t("card_opacity"), 40, 100, "%", false, this.t("card_opacity_hint"))}
+      <div class="row">
+        <span>${this.t("popups")}</span>
+        ${this._segment(b, "popup", [
+          ["solid", this.t("popup_solid")],
+          ["glass", this.t("popup_glass")],
+        ])}
+      </div>
+      ${b.popup === "glass" ? this._slider(b, "popup_opacity", this.t("popup_opacity"), 30, 100, "%") : nothing}
+    `;
+  }
+
+  _allVars() {
+    const d = this._draft;
+    const derived = derive({ ...BASE_DEFAULTS, ...d.base });
+    const vars = themeVars(d);
+    return html`
+      <h3>${this.t("all_vars")}</h3>
+      <p class="hint">${this.t("all_vars_hint")}</p>
+      ${GROUPS.map(
+        (group) => html`
+          <details>
+            <summary>
+              ${group[this._lang]}
+              <span class="dots">
+                ${group.vars
+                  .filter(([, , , kind]) => kind === "color")
+                  .slice(0, 6)
+                  .map(([key]) => html`<i style="background:${vars[key]}"></i>`)}
+              </span>
+            </summary>
+            ${group.vars.map(([key, nl, en, kind]) => this._varRow(key, this._lang === "nl" ? nl : en, kind, derived[key]))}
+          </details>
+        `
+      )}
+      <h3>${this.t("custom_vars")}</h3>
+      <p class="hint">${this.t("custom_vars_hint")}</p>
+      ${Object.entries(d.overrides)
+        .filter(([key]) => !KNOWN_VARS.has(key))
+        .map(([key, value]) => this._varRow(key, `--${key}`, "text", "", value, true))}
+      <div class="row add-var">
+        <input
+          type="text"
+          placeholder=${this.t("var_name")}
+          .value=${this._newVar.key}
+          @input=${(ev) => (this._newVar = { ...this._newVar, key: ev.target.value })}
+        />
+        <input
+          type="text"
+          placeholder=${this.t("var_value")}
+          .value=${this._newVar.value}
+          @input=${(ev) => (this._newVar = { ...this._newVar, value: ev.target.value })}
+        />
+        <button
+          class="small"
+          ?disabled=${!/^[a-z0-9][a-z0-9_-]*$/.test(this._newVar.key.replace(/^--/, "")) || !this._newVar.value}
+          @click=${() => {
+            this._override(this._newVar.key.replace(/^--/, ""), this._newVar.value);
+            this._newVar = { key: "", value: "" };
+          }}
+        >
+          ${this.t("add_var")}
         </button>
       </div>
     `;
   }
 
-  // Leaving a dirty draft asks first, right below the buttons you clicked.
-  _pick(go) {
-    if (this.dirty) this._leaving = go;
-    else go();
+  _previewCard() {
+    return html`<aside class="card preview">
+      <h2>${this.t("preview")}</h2>
+      <ss-theme-preview .vars=${themeVars(this._draft)} .t=${this.t} ?popup=${this._popup}></ss-theme-preview>
+      <label class="row">
+        <span>${this.t("show_popup")}</span>
+        <input type="checkbox" class="switch" .checked=${this._popup} @change=${(ev) => (this._popup = ev.target.checked)} />
+      </label>
+      <label class="row">
+        <span>
+          ${this.t("whole_screen")}
+          <small>${this.t("whole_screen_hint")}</small>
+        </span>
+        <input
+          type="checkbox"
+          class="switch"
+          .checked=${this._wholeScreen}
+          @change=${(ev) => (this._wholeScreen = ev.target.checked)}
+        />
+      </label>
+    </aside>`;
   }
 
-  _leavingQuestion() {
-    if (!this._leaving) return nothing;
-    return html`<div class="leaving" role="alert">
-      <span>${this.t("discard_confirm")}</span>
-      <button @click=${() => (this._leaving = null)}>${this.t("no")}</button>
-      <button
-        class="primary"
-        @click=${() => {
-          const go = this._leaving;
-          this._leaving = null;
-          this._wholeScreen = false;
-          go();
-        }}
-      >
-        ${this.t("yes")}
+  // Use a theme: for yourself right away, or as the default for everyone.
+  _useList() {
+    const { themes, loaded, default_theme: fallback } = this._state;
+    const row = (name, color) => html`<div class="use-row" data-theme=${name}>
+      <span class="swatch" style="background:${color ?? "var(--primary-color)"}"></span>
+      <b>${name}</b>
+      ${name === fallback ? html`<em>${this.t("badge_default")}</em>` : nothing}
+      <span class="grow"></span>
+      <button class="small" ?disabled=${!loaded.includes(name) && !this._state.others[name]} @click=${() => this._useForMe(name)}>
+        ${this.t("use_for_me")}
       </button>
+      ${name === fallback
+        ? nothing
+        : html`<button class="small" title=${this.t("set_default_hint")} @click=${() => this._setDefault(name)}>
+            ${this.t("set_default")}
+          </button>`}
     </div>`;
+    return html`
+      <div class="card">
+        <h2>${this.t("th_use_title")}</h2>
+        <p class="hint">${this.t("th_use_hint")}</p>
+        ${themes.map((theme) => row(theme.name, theme.vars["primary-color"]))}
+        ${Object.keys(this._state.others).length
+          ? html`<details class="more">
+              <summary>${this.t("th_other_themes")}</summary>
+              ${Object.entries(this._state.others).map(([name, vars]) => row(name, vars["primary-color"]))}
+            </details>`
+          : nothing}
+      </div>
+    `;
   }
 
   // Shows the saved theme on this screen now, as if picked in the profile.
-  _useForMe() {
-    const name = this._saved.name;
+  _useForMe(name = this._saved.name) {
     document
       .querySelector("home-assistant")
       ?.dispatchEvent(new CustomEvent("settheme", { detail: { theme: name } }));
@@ -331,8 +561,7 @@ class ThemesTab extends TabBase {
     const others = Object.keys(this._state.others);
     const current = this._current();
     return html`
-      <div class="card">
-        <h2>${this.t("start_from")}</h2>
+      <div>
         <button class="current" @click=${() => this._startFromCurrent()}>
           <ha-icon icon="mdi:palette-swatch"></ha-icon>
           <span>
@@ -373,193 +602,6 @@ class ThemesTab extends TabBase {
               </select>
             </label>`
           : nothing}
-      </div>
-    `;
-  }
-
-  _editor() {
-    const d = this._draft;
-    const b = { ...BASE_DEFAULTS, ...d.base };
-    const derived = derive(b);
-    const vars = themeVars(d);
-    const saved = this._saved;
-    return html`
-      ${saved && !this._state.loaded.includes(saved.name)
-        ? this._warning(this.t("warn_not_loaded"))
-        : nothing}
-      <div class="layout">
-        <div class="settings">
-          <div class="card">
-            <label class="row">
-              <span>${this.t("theme_name")}</span>
-              <input
-                type="text"
-                class="name"
-                maxlength="50"
-                .value=${d.name}
-                @input=${(ev) => {
-                  this._draft = { ...this._draft, name: ev.target.value };
-                }}
-              />
-            </label>
-            ${this._nameOk ? nothing : html`<p class="hint bad">${this.t("err_bad_name")}</p>`}
-          </div>
-
-          <div class="card">
-            <h2>${this.t("quick")}</h2>
-            <p class="hint">${this.t("quick_hint")}</p>
-            ${this._fixedNotice()}
-            ${this._color(b, "background", this.t("c_background"))}
-            ${this._color(b, "card", this.t("c_card"))}
-            ${this._color(b, "text", this.t("c_text"))}
-            ${this._color(b, "accent", this.t("c_accent"))}
-            ${this._color(b, "sidebar", this.t("c_sidebar"))}
-            <label class="row">
-              <span>
-                ${this.t("c_icons")}
-                <small>${this.t("c_icons_hint")}</small>
-              </span>
-              <span class="inline">
-                ${b.icon
-                  ? html`<input
-                      type="color"
-                      aria-label=${this.t("c_icons")}
-                      .value=${b.icon}
-                      @input=${(ev) => this._set("icon", ev.target.value)}
-                    />`
-                  : nothing}
-                <input
-                  type="checkbox"
-                  class="switch"
-                  aria-label=${this.t("c_icons_own")}
-                  .checked=${Boolean(b.icon)}
-                  @change=${(ev) => this._set("icon", ev.target.checked ? derived["state-icon-color"] : null)}
-                />
-              </span>
-            </label>
-            <label class="row">
-              <span>${this.t("header_same")}</span>
-              <span class="inline">
-                ${b.header
-                  ? html`<input
-                      type="color"
-                      aria-label=${this.t("c_header")}
-                      .value=${b.header}
-                      @input=${(ev) => this._set("header", ev.target.value)}
-                    />`
-                  : nothing}
-                <input
-                  type="checkbox"
-                  class="switch"
-                  .checked=${!b.header}
-                  @change=${(ev) => this._set("header", ev.target.checked ? null : b.background)}
-                />
-              </span>
-            </label>
-            ${this._slider(b, "radius", this.t("corners"), 0, 28, "px")}
-            <div class="row">
-              <span>${this.t("shadow")}</span>
-              ${this._segment(b, "shadow", [
-                ["none", this.t("shadow_none")],
-                ["soft", this.t("shadow_soft")],
-                ["strong", this.t("shadow_strong")],
-              ])}
-            </div>
-            ${this._slider(b, "card_opacity", this.t("card_opacity"), 40, 100, "%", false, this.t("card_opacity_hint"))}
-            <div class="row">
-              <span>${this.t("popups")}</span>
-              ${this._segment(b, "popup", [
-                ["solid", this.t("popup_solid")],
-                ["glass", this.t("popup_glass")],
-              ])}
-            </div>
-            ${b.popup === "glass"
-              ? this._slider(b, "popup_opacity", this.t("popup_opacity"), 30, 100, "%")
-              : nothing}
-          </div>
-
-          <div class="card">
-            <h2>${this.t("all_vars")}</h2>
-            <p class="hint">${this.t("all_vars_hint")}</p>
-            ${GROUPS.map(
-              (group) => html`
-                <details>
-                  <summary>
-                    ${group[this._lang]}
-                    <span class="dots">
-                      ${group.vars
-                        .filter(([, , , kind]) => kind === "color")
-                        .slice(0, 6)
-                        .map(([key]) => html`<i style="background:${vars[key]}"></i>`)}
-                    </span>
-                  </summary>
-                  ${group.vars.map(([key, nl, en, kind]) =>
-                    this._varRow(key, this._lang === "nl" ? nl : en, kind, derived[key])
-                  )}
-                </details>
-              `
-            )}
-          </div>
-
-          <div class="card">
-            <h2>${this.t("custom_vars")}</h2>
-            <p class="hint">${this.t("custom_vars_hint")}</p>
-            ${Object.entries(d.overrides)
-              .filter(([key]) => !KNOWN_VARS.has(key))
-              .map(([key, value]) => this._varRow(key, `--${key}`, "text", "", value, true))}
-            <div class="row add-var">
-              <input
-                type="text"
-                placeholder=${this.t("var_name")}
-                .value=${this._newVar.key}
-                @input=${(ev) => (this._newVar = { ...this._newVar, key: ev.target.value })}
-              />
-              <input
-                type="text"
-                placeholder=${this.t("var_value")}
-                .value=${this._newVar.value}
-                @input=${(ev) => (this._newVar = { ...this._newVar, value: ev.target.value })}
-              />
-              <button
-                class="small"
-                ?disabled=${!/^[a-z0-9][a-z0-9_-]*$/.test(this._newVar.key.replace(/^--/, "")) ||
-                !this._newVar.value}
-                @click=${() => {
-                  this._override(this._newVar.key.replace(/^--/, ""), this._newVar.value);
-                  this._newVar = { key: "", value: "" };
-                }}
-              >
-                ${this.t("add_var")}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <aside class="card preview">
-          <h2>${this.t("preview")}</h2>
-          <ss-theme-preview .vars=${vars} .t=${this.t} ?popup=${this._popup}></ss-theme-preview>
-          <label class="row">
-            <span>${this.t("show_popup")}</span>
-            <input
-              type="checkbox"
-              class="switch"
-              .checked=${this._popup}
-              @change=${(ev) => (this._popup = ev.target.checked)}
-            />
-          </label>
-          <label class="row">
-            <span>
-              ${this.t("whole_screen")}
-              <small>${this.t("whole_screen_hint")}</small>
-            </span>
-            <input
-              type="checkbox"
-              class="switch"
-              .checked=${this._wholeScreen}
-              @change=${(ev) => (this._wholeScreen = ev.target.checked)}
-            />
-          </label>
-        </aside>
       </div>
     `;
   }
@@ -621,41 +663,39 @@ class ThemesTab extends TabBase {
     `;
   }
 
-  _barButtons() {
-    const saved = this._selected !== NEW ? this._saved : null;
-    const buttons = [];
-    if (this._state.history) {
-      buttons.push(html`<button ?disabled=${this._busy} @click=${this._undo}>
-        <ha-icon icon="mdi:history"></ha-icon>${this.t("undo")}
-      </button>`);
-    }
-    if (saved && !this.dirty) {
-      if (this._state.loaded.includes(saved.name)) {
-        buttons.push(html`<button ?disabled=${this._busy} @click=${this._useForMe}>
-          <ha-icon icon="mdi:account-check"></ha-icon>${this.t("use_for_me")}
-        </button>`);
-      }
-      if (saved.name === this._state.default_theme) {
-        buttons.push(html`<span class="note">${this.t("is_default")}</span>`);
-      } else if (this._state.loaded.includes(saved.name)) {
-        buttons.push(html`<button
-          ?disabled=${this._busy}
-          title=${this.t("set_default_hint")}
-          @click=${this._setDefault}
-        >
-          <ha-icon icon="mdi:account-group"></ha-icon>${this.t("set_default")}
-        </button>`);
-      }
-      buttons.push(html`<button ?disabled=${this._busy} @click=${this._delete}>
-        <ha-icon icon="mdi:delete-outline"></ha-icon>${this.t("delete_theme")}
-      </button>`);
-    }
-    return buttons.length ? buttons : nothing;
-  }
-
   static styles = [
     TabBase.styles,
     css`
+      .use-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 0;
+        border-top: 1px solid var(--divider-color);
+      }
+
+      .use-row .grow {
+        flex: 1;
+      }
+
+      .use-row em {
+        font-style: normal;
+        font-size: 12px;
+        color: var(--secondary-text-color);
+      }
+
+      .danger {
+        color: var(--error-color);
+        margin-top: 12px;
+      }
+
+      h3 {
+        margin: 12px 0 4px;
+        font-size: 15px;
+        font-weight: 500;
+      }
+
       .chips {
         display: flex;
         flex-wrap: wrap;
@@ -867,29 +907,6 @@ class ThemesTab extends TabBase {
       .fixed span {
         flex: 1;
         min-width: 200px;
-      }
-
-      .leaving {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 10px;
-        padding: 12px 14px;
-        margin-bottom: 16px;
-        border-radius: var(--ss-radius, 12px);
-        background: color-mix(in srgb, var(--warning-color, #ffa600) 16%, var(--card-background-color));
-      }
-
-      .leaving span {
-        flex: 1;
-      }
-
-      .leaving button:not(.primary) {
-        padding: 8px 12px;
-      }
-
-      .hint.bad {
-        color: var(--error-color);
       }
 
       .note {

@@ -9,9 +9,7 @@ const popupHash = (card) =>
   card?.card_type === "pop-up" ? card.hash : card?.type === "vertical-stack" ? card.cards?.[0]?.hash : undefined;
 
 async function preset(themesTab, key) {
-  if (!(await themesTab.locator(`[data-preset="${key}"]`).count())) {
-    await themesTab.getByRole("button", { name: "Nieuw thema" }).click();
-  }
+  if (await themesTab.locator('[data-choice="new"]').count()) await themesTab.locator('[data-choice="new"]').click();
   await themesTab.locator(`[data-preset="${key}"]`).click();
 }
 
@@ -59,7 +57,9 @@ async function open(width, query = "", tabName = "Zijbalk") {
   const errors = [];
   tab.on("pageerror", (err) => errors.push(err.message));
   tab.on("console", (msg) => {
-    if (msg.type() === "error" && !msg.location().url.endsWith("favicon.ico")) errors.push(msg.text());
+    // The full icon list only exists in a real Home Assistant.
+    const url = msg.location().url;
+    if (msg.type() === "error" && !url.endsWith("favicon.ico") && !url.includes("/static/mdi/")) errors.push(msg.text());
   });
   await tab.goto(`${base}${query}`);
   const panel = tab.locator("style-studio-panel");
@@ -124,18 +124,17 @@ for (const width of [430, 1920]) {
   await panel.locator('input[type="range"]').nth(1).fill("6");
   await tab.waitForTimeout(100);
   check(await saveBarOnScreen(tab, panel), `${width}px: Save bar on screen after a change`);
-  // A person scrolls with the wheel; the groups card at the bottom must come into view.
+  // A person scrolls with the wheel; the groups at the bottom must come into view.
+  await panel.getByRole("button", { name: /^5\s*Groepen/ }).click().catch(() => {});
+  for (const head of ["Glas", "Actieve pagina", "Telefoon", "Groepen"]) {
+    await panel.locator("ss-sidebar-tab").getByRole("button", { name: "Volgende" }).click();
+  }
   await tab.mouse.move(width / 2, 400);
   for (let i = 0; i < 15; i += 1) await tab.mouse.wheel(0, 600);
   await tab.waitForTimeout(300);
   const groups = await panel.locator("ss-groups-editor").boundingBox();
   check(Boolean(groups) && groups.y < tab.viewportSize().height, `${width}px: wheel scrolls the panel`);
-  const themes = await open(width, "", "Thema's");
-  await preset(themes.panel.locator("ss-themes-tab"), "sand");
-  await themes.tab.waitForTimeout(100);
-  check(await saveBarOnScreen(themes.tab, themes.panel), `${width}px: theme Save bar on screen`);
   await ctx.close();
-  await themes.ctx.close();
 }
 
 // Editing: nothing changes until Save; Save goes to Glass Sidebar; undo restores.
@@ -159,12 +158,13 @@ for (const width of [430, 1920]) {
   state = await tab.evaluate(probe);
   check(state.sidebarRadius === "20px", `undo restores radius (${state.sidebarRadius})`);
 
-  // Groups: add one, move an item into it with tap + "Hierheen", save.
+  // Groups, the last step: add one, move an item into it with tap + "Hierheen", save.
+  for (let i = 0; i < 4; i += 1) await panel.locator("ss-sidebar-tab").getByRole("button", { name: "Volgende" }).click();
   const editor = panel.locator("ss-groups-editor");
   await editor.getByRole("button", { name: "Groep toevoegen" }).click();
   await editor.getByRole("button", { name: /Overzicht/ }).click();
   await editor.getByRole("button", { name: "Hierheen" }).last().click();
-  await panel.getByRole("button", { name: "Opslaan" }).click();
+  await panel.getByRole("button", { name: "Opslaan" }).first().click();
   await tab.waitForTimeout(300);
   state = await tab.evaluate(probe);
   check(state.visible.endsWith("# Nieuwe groep,lovelace"), `new group in Glass Sidebar (${state.visible})`);
@@ -173,21 +173,31 @@ for (const width of [430, 1920]) {
   await ctx.close();
 }
 
-// Themes: start from a preset, change things, save, show on the whole screen,
-// make it the default, copy an existing theme, delete and restore.
+// Themes, step by step: a new theme, saved and used; changed; copied;
+// deleted and restored.
 {
   const { ctx, tab, panel, errors } = await open(1920, "", "Thema's");
   const themesTab = panel.locator("ss-themes-tab");
-  let state = await tab.evaluate(probe);
-  check(
-    (await themesTab.getByRole("textbox", { name: "Naam", exact: true }).inputValue()) === "Licht Warm (kopie)",
-    "first time: starts from the theme in use"
-  );
-  check(!state.panelText.includes("Niet opgeslagen"), "that start doesn't count as a change");
-  check(state.panelText.includes("kleuren komen vast uit het gekopieerde thema"), "fixed colors explained");
+  const next = () => themesTab.getByRole("button", { name: "Volgende" }).click();
+  const choices = async () => (await themesTab.locator(".choice").allInnerTexts()).map((c) => c.split("\n")[0].trim());
+  check(JSON.stringify(await choices()) === JSON.stringify(["Een nieuw thema maken", "Een thema gebruiken"]), "no themes yet: new or use");
 
-  await preset(themesTab, "pink");
+  // New: it starts from the theme in use.
+  await themesTab.locator('[data-choice="new"]').click();
+  await next();
+  let state = await tab.evaluate(probe);
+  check(state.panelText.includes("Licht Warm (kopie)"), "starts from the theme in use");
+  check((await themesTab.getByText(/kleuren komen vast uit het gekopieerde thema/).count()) === 1, "fixed colors explained");
+  check(!(await tab.evaluate(probe)).panelText.includes("Niet opgeslagen"), "that start isn't a change");
+
+  // Change of mind: the pink preset.
+  await themesTab.getByRole("button", { name: /Begin met/ }).click();
+  await themesTab.locator('[data-preset="pink"]').click();
+  await next(); // to colors
+  await next(); // to shape
+  await next(); // to name and save
   await themesTab.getByRole("textbox", { name: "Naam", exact: true }).fill("Joyce");
+  await themesTab.locator("summary", { hasText: "Meer opties" }).click();
   await themesTab.locator("summary", { hasText: "Bovenbalk" }).click();
   const headerField = themesTab
     .locator("details", { hasText: "Bovenbalk" })
@@ -200,7 +210,7 @@ for (const width of [430, 1920]) {
   state = await tab.evaluate(probe);
   check(state.rootPrimary === "#e8749e", `whole-screen preview sets --primary-color (${state.rootPrimary})`);
 
-  await themesTab.getByRole("button", { name: "Opslaan" }).click();
+  await themesTab.getByRole("button", { name: "Opslaan", exact: true }).click();
   await tab.waitForTimeout(300);
   let saved = await tab.evaluate(() => window.__themes());
   check(saved.themes.length === 1 && saved.themes[0].name === "Joyce", "theme saved");
@@ -210,29 +220,28 @@ for (const width of [430, 1920]) {
   state = await tab.evaluate(probe);
   check(state.rootPrimary === "", "whole-screen preview removed after save");
 
-  await themesTab.getByRole("button", { name: "Standaard voor iedereen" }).click();
+  // After saving: who uses it.
+  const row = themesTab.locator('.use-row[data-theme="Joyce"]');
+  await row.getByRole("button", { name: "Standaard voor iedereen" }).click();
   await tab.waitForTimeout(200);
   saved = await tab.evaluate(() => window.__themes());
   check(saved.defaultTheme === "Joyce", "set as default theme");
-
-  await themesTab.getByRole("button", { name: "Voor mij gebruiken" }).click();
-  await tab.waitForTimeout(100);
+  await row.getByRole("button", { name: "Voor mij gebruiken" }).click();
   check((await tab.evaluate(() => window.__appliedTheme)) === "Joyce", "use for me applies the theme here");
 
-  // With unsaved changes, "Nieuw thema" asks right below the buttons.
-  await themesTab.getByRole("radio", { name: "Sterk" }).click();
-  await themesTab.getByRole("button", { name: "Nieuw thema" }).click();
-  const question = themesTab.getByRole("alert");
-  const box = await question.boundingBox();
-  check(Boolean(box) && box.y + box.height <= tab.viewportSize().height, "leave question shown where you click");
-  await question.getByRole("button", { name: "Ja" }).click();
-  state = await tab.evaluate(probe);
-  check(state.panelText.includes("Begin met"), "new theme picker after confirming");
+  // Change it: glass pop-ups.
+  await themesTab.getByRole("button", { name: "Terug" }).click();
+  await themesTab.locator('[data-choice="edit"]').click();
   await themesTab.locator(".chip", { hasText: "Joyce" }).click();
-
-  // Glass pop-ups give a see-through pop-up background.
+  await next();
+  await next();
   await themesTab.getByRole("radio", { name: "Glas" }).click();
-  await themesTab.getByRole("button", { name: "Opslaan" }).click();
+  // Leaving with a change asks first.
+  await themesTab.getByRole("button", { name: "Terug" }).click();
+  check((await themesTab.getByText(/Weggooien/).count()) === 1, "leaving with a change asks first");
+  await themesTab.getByRole("button", { name: "Nee" }).click();
+  await next();
+  await themesTab.getByRole("button", { name: "Opslaan", exact: true }).click();
   await tab.waitForTimeout(300);
   saved = await tab.evaluate(() => window.__themes());
   check(
@@ -241,9 +250,13 @@ for (const width of [430, 1920]) {
   );
 
   // Copy the user's own Licht Warm file as a starting point.
-  await themesTab.getByRole("button", { name: "Nieuw thema" }).click();
+  await themesTab.getByRole("button", { name: "Terug" }).click();
+  await themesTab.locator('[data-choice="new"]').click();
   await themesTab.locator("select").selectOption("Licht Warm");
-  await themesTab.getByRole("button", { name: "Opslaan" }).click();
+  await next();
+  await next();
+  await next();
+  await themesTab.getByRole("button", { name: "Opslaan", exact: true }).click();
   await tab.waitForTimeout(300);
   saved = await tab.evaluate(() => window.__themes());
   check(
@@ -251,6 +264,14 @@ for (const width of [430, 1920]) {
     `copied existing theme (${saved.themes.map((t) => t.name).join()})`
   );
 
+  // Delete it (under "Meer opties" of the last step), then restore.
+  await themesTab.getByRole("button", { name: "Terug" }).click();
+  await themesTab.locator('[data-choice="edit"]').click();
+  await themesTab.locator(".chip", { hasText: "Licht Warm (kopie)" }).click();
+  await next();
+  await next();
+  await next();
+  await themesTab.locator("summary", { hasText: "Meer opties" }).click();
   await themesTab.getByRole("button", { name: "Thema verwijderen" }).click();
   await themesTab.getByRole("button", { name: "Ja" }).click();
   await tab.waitForTimeout(300);
@@ -275,6 +296,7 @@ for (const width of [430, 1920]) {
   check(state.panelText.includes("Gebruikt nu: Licht Roze"), "Joyce's reported theme shown");
 
   await people.getByRole("combobox", { name: "Thema (Roy)" }).selectOption("Licht Roze");
+  await people.locator('.person[data-user="Roy"] summary', { hasText: "Meer opties" }).click();
   await people.getByRole("combobox", { name: /Zijbalk.*\(Roy\)/ }).selectOption({ label: "Zoals Joyce nu" });
   await people.getByRole("button", { name: "Opslaan" }).click();
   await tab.waitForTimeout(2500);
@@ -289,6 +311,7 @@ for (const width of [430, 1920]) {
   check(roy?.theme === "Licht Roze" && roy.version, "runtime reported back");
 
   // Copy everything from Joyce to... Joyce can't copy from herself; copy Roy to Joyce.
+  await people.locator('.person[data-user="Joyce"] summary', { hasText: "Meer opties" }).click();
   await people.getByRole("combobox", { name: "Alles kopiëren van (Joyce)" }).selectOption("8faf3d60");
   await people.getByRole("button", { name: "Opslaan" }).click();
   await tab.waitForTimeout(300);
@@ -305,21 +328,26 @@ for (const width of [430, 1920]) {
   await ctx.close();
 }
 
-// Climate: options, preview, and putting the pop-up on a dashboard.
+// Climate, step by step: which air conditioner, what goes in it, where.
 {
   const { ctx, tab, panel, errors } = await open(1920, "", "Klimaat");
   const climate = panel.locator("ss-climate-tab");
   const preview = climate.locator("ss-card-preview");
-  await climate.getByRole("button", { name: "LG Woonkamer" }).click();
-  check((await climate.getByRole("textbox", { name: "Naam" }).inputValue()) === "Airco woonkamer", "name from the room");
-  check((await climate.getByRole("textbox", { name: /Adres/ }).inputValue()) === "#airco-woonkamer", "address from the room");
+  const next = () => climate.getByRole("button", { name: "Volgende" }).click();
+  await climate.locator(".tile", { hasText: "LG Woonkamer" }).click();
+  await next();
   check((await preview.locator(".button.active").allInnerTexts()).some((t) => t.includes("Koel")), "current mode is active in preview");
   check((await preview.locator(".button.active").allInnerTexts()).some((t) => t.includes("Links/rechts")), "horizontal swing on");
   check((await preview.getByText("21°", { exact: true }).count()) === 1, "target temperature shown");
   check((await preview.getByText("Droog", { exact: true }).count()) === 1, "dry mode in preview before unchecking");
-
   await climate.getByRole("checkbox", { name: "Droog" }).uncheck();
   check((await preview.getByText("Droog", { exact: true }).count()) === 0, "unchecked mode leaves the preview");
+  await next();
+
+  // Name and address are folded under "Meer opties".
+  await climate.locator("summary", { hasText: "Meer opties" }).click();
+  check((await climate.getByRole("textbox", { name: "Naam" }).inputValue()) === "Airco woonkamer", "name from the room");
+  check((await climate.getByRole("textbox", { name: /Adres/ }).inputValue()) === "#airco-woonkamer", "address from the room");
 
   await climate.getByRole("button", { name: "Op dashboard zetten" }).click();
   await climate.getByRole("button", { name: "Ja" }).click();
@@ -343,18 +371,18 @@ for (const width of [430, 1920]) {
   await tab.waitForTimeout(300);
   lovelace = await tab.evaluate(() => window.__lovelace());
   const again = lovelace.dashboards.__main.views[0].sections.flatMap((section) => section.cards);
-  check(
-    again.filter((c) => popupHash(c) === "#airco-woonkamer").length === 1,
-    "second time replaces the pop-up"
-  );
+  check(again.filter((c) => popupHash(c) === "#airco-woonkamer").length === 1, "second time replaces the pop-up");
   check(again.some((c) => c.type === "vertical-stack" && popupHash(c) === "#airco-woonkamer"), "old format when chosen");
   await climate.getByRole("radio", { name: "Nieuw (3.2+)" }).click();
 
-  // The other air conditioner has no fan modes or swing.
-  await climate.getByRole("button", { name: "Slaapkamer" }).click();
+  // The other air conditioner has no fan modes or swing; back to step 1.
+  await climate.getByRole("button", { name: /Welke airco/ }).click();
+  await climate.locator(".tile", { hasText: "Slaapkamer" }).click();
+  await next();
   check((await climate.getByText(/geen ventilatorstanden/).count()) === 1, "missing fan explained");
+  await next();
 
-  // A panel-mode view can't take extra cards.
+  // A panel-mode page can't take extra cards.
   await climate.getByRole("combobox", { name: "Dashboard" }).selectOption({ label: "Plattegrond" });
   await tab.waitForTimeout(200);
   check(await climate.getByRole("button", { name: "Op dashboard zetten" }).isDisabled(), "panel view refused");
@@ -363,46 +391,60 @@ for (const width of [430, 1920]) {
   await ctx.close();
 }
 
-// Rooms on your own dashboard: find a hand-made room and change it in place,
-// add a room from an area and one made by hand, add other cards.
+// Rooms on your own dashboard, step by step: change a hand-made room in place,
+// add one from an area and one by hand, add other cards, make a whole page.
 {
   const { ctx, tab, panel, errors } = await open(1920, "", "Kamers en pop-ups");
   const rooms = panel.locator("ss-rooms-tab");
-  await rooms.locator(".chip").first().waitFor();
-  const chips = (await rooms.locator(".chip").allInnerTexts()).map((c) => c.trim());
-  check(chips[0] === "Woonkamer", `hand-made room found on the dashboard (${chips.join(", ")})`);
-  check(chips.includes("Keuken") && chips.includes("Kamer toevoegen"), "areas not on the dashboard offered");
+  const next = () => rooms.getByRole("button", { name: "Volgende" }).click();
+  const yes = () => rooms.getByRole("button", { name: "Ja" }).click();
+  const begin = async (choice) => {
+    await rooms.locator(`[data-choice="${choice}"]`).click();
+  };
+  check((await rooms.locator(".choice").count()) === 4, "starts with four choices");
+
+  // Change the hand-made living room.
+  await begin("edit");
+  await rooms.locator(".tile", { hasText: "Woonkamer" }).click();
+  await next();
+  await rooms.getByRole("textbox", { name: "Naam" }).fill("Huiskamer");
+  await rooms.getByRole("button", { name: "Ander icoon kiezen" }).click();
+  await rooms.locator("ss-icon-picker").getByRole("button", { name: "sofa-outline", exact: true }).click();
+  await next();
   check(
     (await rooms.getByRole("checkbox", { name: "Plafondlamp" }).isChecked()) &&
       (await rooms.getByRole("checkbox", { name: "Staande lamp" }).isChecked()),
     "its lights read from the pop-up"
   );
-
-  // Change it: other name, one light less; its own design stays.
-  await rooms.getByRole("textbox", { name: "Naam" }).fill("Huiskamer");
   await rooms.getByRole("checkbox", { name: "Staande lamp" }).uncheck();
-  await rooms.getByRole("button", { name: "Wijzigingen opslaan" }).click();
-  await rooms.getByRole("button", { name: "Ja" }).click();
+  await next(); // lights
+  await next(); // air conditioning
+  await rooms.getByRole("button", { name: "Opslaan", exact: true }).click();
+  await yes();
   await tab.waitForTimeout(400);
   let lovelace = await tab.evaluate(() => window.__lovelace());
   const ground = lovelace.dashboards.__main.views[0].sections[1].cards;
   check(ground[1].name.includes(`const LIGHTS=["light.woonkamer_plafond"]`) && ground[1].name.includes(`const NAME='Huiskamer'`), "tile template changed in place");
+  check(ground[1].name.includes(`const ICON='mdi:sofa-outline'`), "icon picked from the picker");
   check(JSON.stringify(ground[1].styles) === JSON.stringify({ card: [{ "border-radius": "24px" }, { padding: "16px" }] }), "tile design kept");
   check(ground[2].cards[0].name === "Huiskamer" && ground[2].cards.length === 2 && ground[2].cards[1].button_type === "slider", "pop-up lights changed, their design kept");
   check(lovelace.backups.length === 1, "backup before changing");
+  check((await rooms.locator(".choice").count()) === 4, "back at the start after saving");
 
-  // The kitchen from the areas, into the "Begane grond" section by itself.
-  await rooms.locator(".chip", { hasText: "Keuken" }).click();
-  check(
-    (await rooms.getByRole("combobox", { name: "Sectie" }).first().locator("option:checked").innerText()) === "Begane grond",
-    "section follows the floor"
-  );
+  // The kitchen from the areas: goes under its floor's heading by itself.
+  await begin("add");
+  await next(); // where: defaults
+  await rooms.locator(".tile", { hasText: "Keuken" }).click();
+  await next();
+  await next(); // name and icon
+  await next(); // lights
+  await next(); // air conditioning
   await rooms.getByRole("button", { name: "Op dashboard zetten" }).click();
-  await rooms.getByRole("button", { name: "Ja" }).click();
+  await yes();
   await tab.waitForTimeout(400);
   lovelace = await tab.evaluate(() => window.__lovelace());
   const cards = lovelace.dashboards.__main.views[0].sections[1].cards;
-  check(cards.some((c) => c.tap_action?.navigation_path === "#l-keuken"), "kitchen tile added");
+  check(cards.some((c) => c.tap_action?.navigation_path === "#l-keuken"), "kitchen tile added under Begane grond");
   check(cards.some((c) => popupHash(c) === "#l-keuken"), "kitchen pop-up added");
   const kitchenTile = cards.find((c) => c.tap_action?.navigation_path === "#l-keuken");
   check(
@@ -414,22 +456,35 @@ for (const width of [430, 1920]) {
   check(kitchenPopup.type === "vertical-stack" && kitchenPopup.cards[1].button_type === "slider", "its pop-up copies the light cards too");
 
   // A room that isn't an area.
-  await rooms.getByRole("button", { name: "Kamer toevoegen" }).click();
+  await begin("add");
+  await next();
+  await rooms.locator(".tile", { hasText: "Een andere kamer" }).click();
+  await next();
   await rooms.getByRole("textbox", { name: "Naam" }).fill("Kantoor");
+  await next();
   await rooms.getByRole("checkbox", { name: "Zolderlamp" }).check();
+  await next();
+  await next();
   await rooms.getByRole("button", { name: "Op dashboard zetten" }).click();
-  await rooms.getByRole("button", { name: "Ja" }).click();
+  await yes();
   await tab.waitForTimeout(400);
-  check((await rooms.locator(".chip.active").innerText()).trim() === "Kantoor", "new room is then found and selected");
+  lovelace = await tab.evaluate(() => window.__lovelace());
+  check(JSON.stringify(lovelace.dashboards.__main).includes("#l-kantoor"), "room made by hand added");
 
-  // Other cards: a greeting and scenes.
+  // Other cards: a greeting, and scenes.
+  await begin("card");
+  await rooms.locator('[data-card="greeting"]').click();
+  await next();
   await rooms.getByRole("button", { name: "Toevoegen", exact: true }).click();
-  await rooms.getByRole("button", { name: "Ja" }).click();
+  await yes();
   await tab.waitForTimeout(300);
-  await rooms.getByRole("radio", { name: "Scènes" }).click();
+  await begin("card");
+  await rooms.locator('[data-card="scenes"]').click();
+  await next();
   await rooms.getByRole("checkbox", { name: "Avond" }).check();
+  await next();
   await rooms.getByRole("button", { name: "Toevoegen", exact: true }).click();
-  await rooms.getByRole("button", { name: "Ja" }).click();
+  await yes();
   await tab.waitForTimeout(300);
   lovelace = await tab.evaluate(() => window.__lovelace());
   const first = lovelace.dashboards.__main.views[0].sections[0].cards;
@@ -438,16 +493,16 @@ for (const width of [430, 1920]) {
   check(errors.length === 0, `rooms: no errors ${errors.join(" | ")}`);
   if (shots) await tab.screenshot({ path: `${shots}/rooms.png` });
 
-  // A whole view from the areas still works.
-  await rooms.locator("summary", { hasText: "Complete weergave maken" }).click();
+  // A whole page from the areas.
+  await begin("page");
   const view = rooms.locator("ss-rooms-view");
-  check((await view.locator(".floor").count()) === 3, "whole view: one card per floor");
+  check((await view.locator(".floor").count()) === 3, "whole page: one card per floor");
   await view.getByRole("button", { name: "Weergave maken" }).click();
   await view.getByRole("button", { name: "Ja" }).click();
   await tab.waitForTimeout(300);
   lovelace = await tab.evaluate(() => window.__lovelace());
-  check(lovelace.dashboards.__main.views.some((v) => v.path === "kamers"), "whole view made");
-  check(lovelace.dashboards.__main.views.length === 3, "other views kept");
+  check(lovelace.dashboards.__main.views.some((v) => v.path === "kamers"), "whole page made");
+  check(lovelace.dashboards.__main.views.length === 3, "other pages kept");
   await ctx.close();
 }
 
@@ -496,6 +551,7 @@ for (const width of [430, 1920]) {
 {
   const { ctx, tab, panel, errors } = await open(430, "", "Thema's");
   await preset(panel.locator("ss-themes-tab"), "sand");
+  await panel.locator("ss-themes-tab").getByRole("button", { name: "Volgende" }).click();
   await tab.waitForTimeout(200);
   check(errors.length === 0, `themes on a phone: no errors ${errors.join(" | ")}`);
   if (shots) await tab.screenshot({ path: `${shots}/themes-430.png` });

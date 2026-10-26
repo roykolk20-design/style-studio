@@ -4,13 +4,6 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { server } from "./serve.mjs";
 
-async function preset(themes, key) {
-  if (!(await themes.locator(`[data-preset="${key}"]`).count())) {
-    await themes.getByRole("button", { name: "Nieuw thema" }).click();
-  }
-  await themes.locator(`[data-preset="${key}"]`).click();
-}
-
 const base = "http://127.0.0.1:8123/dev/harness.html";
 const out = (name) => fileURLToPath(new URL(`../images/${name}`, import.meta.url));
 const browser = await chromium.launch({ channel: "msedge" });
@@ -25,28 +18,37 @@ async function open(width, height, tabName = "Thema's") {
   return { page, panel, themes: panel.locator("ss-themes-tab") };
 }
 
+const next = (tab) => tab.getByRole("button", { name: "Volgende" }).click();
+
+// A new theme from a preset, at a given step (0 = start, 1 = colors, ...).
+async function newTheme(themes, key, steps) {
+  await themes.locator('[data-choice="new"]').click();
+  if (key) await themes.locator(`[data-preset="${key}"]`).click();
+  for (let i = 0; i < steps; i += 1) await next(themes);
+}
+
 // Start screen of the theme editor.
 {
-  const { page, themes } = await open(1280, 800);
-  await themes.getByRole("button", { name: "Nieuw thema" }).click();
-  await page.waitForTimeout(200);
+  const { page } = await open(1280, 800);
   await page.screenshot({ path: out("presets.png") });
   await page.close();
 }
 
-// Editing a theme, with the pop-up in the preview.
+// Editing a theme: the colors step, with the pop-up in the preview.
 {
   const { page, themes } = await open(1280, 800);
-  await preset(themes, "sand");
+  await newTheme(themes, "sand", 1);
   await page.waitForTimeout(300);
   await page.screenshot({ path: out("themes.png") });
 
-  // Every variable, by group.
+  // Every variable, under "Meer opties" in the last step.
+  await next(themes);
+  await next(themes);
+  await themes.locator("summary", { hasText: "Meer opties" }).click();
   for (const group of ["Bovenbalk", "Pop-ups (Bubble Card)"]) {
     await themes.locator("summary", { hasText: group }).click();
   }
   await themes.locator("summary", { hasText: "Bovenbalk" }).scrollIntoViewIfNeeded();
-  await page.mouse.wheel(0, -120);
   await page.waitForTimeout(300);
   await page.screenshot({ path: out("all-colors.png") });
   await page.close();
@@ -55,10 +57,9 @@ async function open(width, height, tabName = "Thema's") {
 // The pink theme on the whole screen, before saving.
 {
   const { page, themes } = await open(1280, 800);
-  await preset(themes, "pink");
+  await newTheme(themes, "pink", 2);
   await themes.getByRole("radio", { name: "Glas" }).click();
   await themes.getByRole("checkbox", { name: /Ook tonen op dit hele scherm/ }).check();
-  await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(300);
   await page.screenshot({ path: out("pink.png") });
   await page.close();
@@ -67,9 +68,8 @@ async function open(width, height, tabName = "Thema's") {
 // The dark preset.
 {
   const { page, themes } = await open(1280, 800);
-  await preset(themes, "dark");
+  await newTheme(themes, "dark", 1);
   await themes.getByRole("checkbox", { name: /Ook tonen op dit hele scherm/ }).check();
-  await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(300);
   await page.screenshot({ path: out("dark.png") });
   await page.close();
@@ -86,7 +86,7 @@ async function open(width, height, tabName = "Thema's") {
 {
   const { page, panel } = await open(1280, 800, "Per persoon");
   const people = panel.locator("ss-people-tab");
-  await people.waitFor();
+  await people.locator(".intro").waitFor();
   await page.waitForTimeout(300);
   await people.getByRole("combobox", { name: "Thema (Roy)" }).selectOption("Licht Warm");
   await people.getByRole("combobox", { name: "Thema (Joyce)" }).selectOption("Licht Roze");
@@ -96,23 +96,27 @@ async function open(width, height, tabName = "Thema's") {
   await page.close();
 }
 
-// Climate pop-up for the LG air conditioner.
+// Climate pop-up for the LG air conditioner, step 2.
 {
   const { page, panel } = await open(1280, 800, "Klimaat");
   const climate = panel.locator("ss-climate-tab");
-  await climate.getByRole("button", { name: "LG Woonkamer" }).click();
+  await climate.locator(".tile", { hasText: "LG Woonkamer" }).click();
+  await next(climate);
   await page.waitForTimeout(400);
   await page.screenshot({ path: out("climate.png") });
   await page.close();
 }
 
-// Rooms on your own dashboard: a hand-made room found and changed.
+// Rooms: what do you want to do, and changing a hand-made room.
 {
   const { page, panel } = await open(1280, 800, "Kamers en pop-ups");
   const rooms = panel.locator("ss-rooms-tab");
-  // The hand-made living room on the dashboard, being changed.
-  await rooms.locator(".chip", { hasText: "Woonkamer" }).click();
-  await rooms.getByRole("checkbox", { name: "Keukenlamp" }).check();
+  await rooms.locator(".choice").first().waitFor();
+  await page.screenshot({ path: out("rooms-start.png") });
+  await rooms.locator('[data-choice="edit"]').click();
+  await rooms.locator(".tile", { hasText: "Woonkamer" }).click();
+  await next(rooms);
+  await rooms.getByRole("button", { name: "Ander icoon kiezen" }).click();
   await page.waitForTimeout(400);
   await page.screenshot({ path: out("rooms.png") });
   await page.close();
@@ -131,7 +135,7 @@ async function open(width, height, tabName = "Thema's") {
 // Phone.
 {
   const { page, themes } = await open(430, 860);
-  await preset(themes, "sand");
+  await newTheme(themes, "sand", 1);
   await page.waitForTimeout(300);
   await page.screenshot({ path: out("mobile.png") });
   await page.close();

@@ -18,6 +18,7 @@ class ClimateTab extends TabBase {
     _dashboard: { state: true },
     _views: { state: true },
     _view: { state: true },
+    _step: { state: true },
   };
 
   constructor() {
@@ -26,6 +27,7 @@ class ClimateTab extends TabBase {
     this._dashboard = null;
     this._views = null;
     this._view = 0;
+    this._step = 0;
   }
 
   connectedCallback() {
@@ -138,109 +140,41 @@ class ClimateTab extends TabBase {
         <div class="card"><p class="hint">${this.t("no_climate")}</p></div>`;
     }
     const o = this._opts;
-    const stateObj = this.hass.states[this._entity];
-    const caps = capabilities(stateObj);
     const { popup } = this._cards();
+    const go = (step) => (this._step = step);
+    const view = this._views?.[this._view];
+    const dashboard = (this._dashboards ?? []).find((d) => d.url_path === this._dashboard);
+    const canPut = !this._busy && dashboard?.editable && view && view.type !== "panel";
+    const steps = [
+      {
+        title: this.t("cl_st_which"),
+        summary: this.hass.states[this._entity]?.attributes.friendly_name ?? this._entity,
+        content: html`<div class="tiles">
+          ${entities.map(
+            (id) => html`<button class="tile ${id === this._entity ? "active" : ""}" @click=${() => this._pickEntity(id)}>
+              <ha-icon icon="mdi:air-conditioner"></ha-icon>${this.hass.states[id].attributes.friendly_name ?? id}
+            </button>`
+          )}
+        </div>`,
+      },
+      { title: this.t("cl_st_parts"), summary: this._partsSummary(), content: this._parts() },
+      { title: this.t("st_where"), content: this._place(popup) },
+    ];
     return html`
       <p class="intro">${this.t("climate_intro")}</p>
-      <div class="chips">
-        ${entities.map(
-          (id) => html`<button
-            class="chip ${id === this._entity ? "active" : ""}"
-            @click=${() => this._pickEntity(id)}
-          >
-            <ha-icon icon="mdi:air-conditioner"></ha-icon>
-            ${this.hass.states[id].attributes.friendly_name ?? id}
-          </button>`
-        )}
-      </div>
       <div class="layout">
-        <div class="settings">
-          <div class="card">
-            <h2>${this.t("cl_popup")}</h2>
-            <label class="row">
-              <span>${this.t("cl_name")}</span>
-              <input type="text" .value=${o.name} @input=${(ev) => this._set("name", ev.target.value)} />
-            </label>
-            <label class="row">
-              <span>
-                ${this.t("cl_hash")}
-                <small>${this.t("cl_hash_hint", { hash: o.hash })}</small>
-              </span>
-              <input
-                type="text"
-                .value=${o.hash}
-                @change=${(ev) => {
-                  const value = ev.target.value.trim().replace(/^#?/, "#").replace(/[^#a-z0-9_-]/gi, "-");
-                  this._set("hash", value.length > 1 ? value : o.hash);
-                }}
-              />
-            </label>
-          </div>
-
-          <div class="card">
-            <h2>${this.t("cl_parts")}</h2>
-            ${this._switch(
-              o,
-              "temperature",
-              this.t("cl_temperature"),
-              this.t("cl_temperature_hint", { min: caps.min, max: caps.max, step: caps.step })
-            )}
-            <div class="row column">
-              <span>${this.t("cl_modes")}</span>
-              <div class="modes">
-                ${caps.modes.map(
-                  (mode) => html`<label class="mode">
-                    <input
-                      type="checkbox"
-                      .checked=${live(o.modes.includes(mode))}
-                      @change=${(ev) =>
-                        this._set(
-                          "modes",
-                          ev.target.checked ? [...o.modes, mode] : o.modes.filter((m) => m !== mode)
-                        )}
-                    />
-                    ${this.t(`mode_${mode}`)}
-                  </label>`
-                )}
-              </div>
-            </div>
-            ${caps.fanModes.length
-              ? this._switch(o, "fan", this.t("cl_fan"), caps.fanModes.join(", "))
-              : this._unavailable(this.t("cl_fan"), this.t("cl_fan_none"))}
-            ${caps.swing
-              ? this._switch(o, "swing", this.t("cl_swing_v"))
-              : this._unavailable(this.t("cl_swing_v"), this.t("cl_swing_none"))}
-            ${caps.swingHorizontal
-              ? this._switch(o, "swing_horizontal", this.t("cl_swing_h"))
-              : this._unavailable(this.t("cl_swing_h"), this.t("cl_swing_none"))}
-            <p class="note"><ha-icon icon="mdi:information-outline"></ha-icon>${this.t("cl_louvers")}</p>
-          </div>
-
-          ${this._placeCard()}
-
-          <div class="card">
-            <details>
-              <summary>${this.t("cl_code")}</summary>
-              <p class="hint">${this.t("cl_code_hint")}</p>
-              <button
-                class="small"
-                @click=${async () => {
-                  await navigator.clipboard?.writeText(JSON.stringify(popup, null, 2));
-                  this._showToast(this.t("copied"));
-                }}
-              >
-                <ha-icon icon="mdi:content-copy"></ha-icon>${this.t("copy")}
-              </button>
-              <pre>${JSON.stringify(popup, null, 2)}</pre>
-            </details>
-          </div>
+        <div>
+          ${this._steps(
+            steps,
+            this._step,
+            go,
+            html`<button class="primary next" ?disabled=${!canPut} @click=${this._put}>${this.t("cl_add")}</button>`
+          )}
         </div>
-
         <aside class="card preview">
           <h2>${this.t("preview")}</h2>
           <div class="popup-title">
-            <ha-icon icon="mdi:air-conditioner"></ha-icon><b>${o.name}</b><code>${o.hash}</code>
+            <ha-icon icon="mdi:air-conditioner"></ha-icon><b>${o.name}</b>
           </div>
           <ss-card-preview
             .hass=${this.hass}
@@ -250,7 +184,56 @@ class ClimateTab extends TabBase {
           ></ss-card-preview>
         </aside>
       </div>
-      ${this._bar({})}
+      ${this._bar({ canSave: false })}
+    `;
+  }
+
+  _partsSummary() {
+    const o = this._opts;
+    const parts = [];
+    if (o.temperature) parts.push(this.t("cl_short_temperature"));
+    if (o.modes.length) parts.push(this.t("cl_short_modes", { count: o.modes.length }));
+    if (o.fan) parts.push(this.t("cl_fan"));
+    if (o.swing || o.swing_horizontal) parts.push(this.t("cl_swing_title"));
+    return parts.join(" · ");
+  }
+
+  _parts() {
+    const o = this._opts;
+    const caps = capabilities(this.hass.states[this._entity]);
+    return html`
+      ${this._switch(
+        o,
+        "temperature",
+        this.t("cl_temperature"),
+        this.t("cl_temperature_hint", { min: caps.min, max: caps.max, step: caps.step })
+      )}
+      <div class="row column">
+        <span>${this.t("cl_modes")}</span>
+        <div class="modes">
+          ${caps.modes.map(
+            (mode) => html`<label class="mode">
+              <input
+                type="checkbox"
+                .checked=${live(o.modes.includes(mode))}
+                @change=${(ev) =>
+                  this._set("modes", ev.target.checked ? [...o.modes, mode] : o.modes.filter((m) => m !== mode))}
+              />
+              ${this.t(`mode_${mode}`)}
+            </label>`
+          )}
+        </div>
+      </div>
+      ${caps.fanModes.length
+        ? this._switch(o, "fan", this.t("cl_fan"), caps.fanModes.join(", "))
+        : this._unavailable(this.t("cl_fan"), this.t("cl_fan_none"))}
+      ${caps.swing
+        ? this._switch(o, "swing", this.t("cl_swing_v"))
+        : this._unavailable(this.t("cl_swing_v"), this.t("cl_swing_none"))}
+      ${caps.swingHorizontal
+        ? this._switch(o, "swing_horizontal", this.t("cl_swing_h"))
+        : this._unavailable(this.t("cl_swing_h"), this.t("cl_swing_none"))}
+      <p class="note"><ha-icon icon="mdi:information-outline"></ha-icon>${this.t("cl_louvers")}</p>
     `;
   }
 
@@ -261,52 +244,97 @@ class ClimateTab extends TabBase {
     </div>`;
   }
 
-  _placeCard() {
+  _place(popup) {
+    const o = this._opts;
     const dashboards = this._dashboards ?? [];
     const dashboard = dashboards.find((d) => d.url_path === this._dashboard);
     const view = this._views?.[this._view];
-    const panelView = view?.type === "panel";
     return html`
-      <div class="card">
-        <h2>${this.t("cl_place")}</h2>
+      ${dashboards.length > 1
+        ? html`<label class="row">
+            <span>${this.t("cl_dashboard")}</span>
+            <select @change=${(ev) => this._pickDashboard(ev.target.value || null)}>
+              ${dashboards.map(
+                (d) => html`<option value=${d.url_path ?? ""} ?selected=${d.url_path === this._dashboard}>${d.title}</option>`
+              )}
+            </select>
+          </label>`
+        : nothing}
+      ${dashboard && !dashboard.editable ? this._warning(this.t("cl_readonly")) : nothing}
+      <label class="row">
+        <span>${this.t("lbl_page")}</span>
+        <select @change=${(ev) => (this._view = Number(ev.target.value))}>
+          ${(this._views ?? []).map(
+            (v, index) => html`<option value=${index} ?selected=${index === this._view}>${v.title ?? v.path ?? index + 1}</option>`
+          )}
+        </select>
+      </label>
+      ${view?.type === "panel" ? this._warning(this.t("cl_panel_view")) : nothing}
+      ${this._switch(o, "opener", this.t("cl_opener"))}
+      <p class="hint">${this.t("cl_place_hint")}</p>
+      ${this._more(html`
         <label class="row">
-          <span>${this.t("cl_dashboard")}</span>
-          <select @change=${(ev) => this._pickDashboard(ev.target.value || null)}>
-            ${dashboards.map(
-              (d) => html`<option value=${d.url_path ?? ""} ?selected=${d.url_path === this._dashboard}>
-                ${d.title}
-              </option>`
-            )}
-          </select>
+          <span>${this.t("cl_name")}</span>
+          <input type="text" .value=${o.name} @input=${(ev) => this._set("name", ev.target.value)} />
         </label>
-        ${dashboard && !dashboard.editable ? this._warning(this.t("cl_readonly")) : nothing}
         <label class="row">
-          <span>${this.t("cl_view")}</span>
-          <select @change=${(ev) => (this._view = Number(ev.target.value))}>
-            ${(this._views ?? []).map(
-              (v, index) => html`<option value=${index} ?selected=${index === this._view}>
-                ${v.title ?? v.path ?? index + 1}
-              </option>`
-            )}
-          </select>
+          <span>
+            ${this.t("cl_hash")}
+            <small>${this.t("cl_hash_hint", { hash: o.hash })}</small>
+          </span>
+          <input
+            type="text"
+            .value=${o.hash}
+            @change=${(ev) => {
+              const value = ev.target.value.trim().replace(/^#?/, "#").replace(/[^#a-z0-9_-]/gi, "-");
+              this._set("hash", value.length > 1 ? value : o.hash);
+            }}
+          />
         </label>
-        ${panelView ? this._warning(this.t("cl_panel_view")) : nothing}
-        ${this._switch(this._opts, "opener", this.t("cl_opener"))}
         ${this._popupFormat()}
+        <p class="hint">${this.t("cl_code_hint")}</p>
         <button
-          class="primary place"
-          ?disabled=${this._busy || !dashboard?.editable || !view || panelView}
-          @click=${this._put}
+          class="small"
+          @click=${async () => {
+            await navigator.clipboard?.writeText(JSON.stringify(popup, null, 2));
+            this._showToast(this.t("copied"));
+          }}
         >
-          ${this.t("cl_add")}
+          <ha-icon icon="mdi:content-copy"></ha-icon>${this.t("copy")}
         </button>
-      </div>
+        <pre>${JSON.stringify(popup, null, 2)}</pre>
+      `)}
     `;
   }
 
   static styles = [
     TabBase.styles,
     css`
+      .tiles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tile {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--divider-color);
+        background: var(--card-background-color);
+      }
+
+      .tile ha-icon {
+        color: var(--primary-color);
+      }
+
+      .tile.active {
+        border-color: var(--primary-color);
+        background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background-color));
+      }
+
       .chips {
         display: flex;
         flex-wrap: wrap;

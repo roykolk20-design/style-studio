@@ -29,6 +29,7 @@ class SidebarTab extends TabBase {
     _page: { state: true },
     _expanded: { state: true },
     _haSidebar: { state: true },
+    _step: { state: true },
   };
 
   constructor() {
@@ -38,6 +39,7 @@ class SidebarTab extends TabBase {
     this._page = "light";
     this._expanded = true;
     this._haSidebar = {};
+    this._step = 0;
   }
 
   connectedCallback() {
@@ -151,68 +153,80 @@ class SidebarTab extends TabBase {
       ${glass.loaded ? nothing : this._warning(this.t("glass_not_loaded"))}
       <div class="layout">
         <div class="settings">
-          <div class="card">
-            <h2>${this.t("shape")}</h2>
-            ${this._switch(s, "floating", this.t("floating"), this.t("floating_hint"))}
-            ${this._slider(s, "inset", this.t("inset"), 0, 24, "px", !s.floating)}
-            ${this._slider(s, "radius", this.t("radius"), 0, 32, "px", !s.floating)}
-          </div>
-
-          <div class="card">
-            <h2>${this.t("glass")}</h2>
-            ${this._slider(s, "blur", this.t("blur"), 0, 40, "px")}
-            ${this._slider(s, "opacity", this.t("opacity"), 40, 100, "%", false, this.t("opacity_hint"))}
-            ${this._switch(s, "glass_cards", this.t("glass_cards"), this.t("glass_cards_hint"))}
-          </div>
-
-          <div class="card">
-            <h2>${this.t("active")}</h2>
-            ${this._segment(s, "highlight", [
-              ["soft", this.t("highlight_soft")],
-              ["vivid", this.t("highlight_vivid")],
-            ])}
-            <label class="row">
-              <span>
-                ${this.t("own_accent")}
-                <small>${this.t("own_accent_hint")}</small>
-              </span>
-              <span class="inline">
-                ${s.accent
-                  ? html`<input
-                      type="color"
-                      .value=${s.accent}
-                      @input=${(ev) => this._set("accent", ev.target.value)}
-                    />`
-                  : nothing}
-                <input
-                  type="checkbox"
-                  class="switch"
-                  .checked=${Boolean(s.accent)}
-                  @change=${(ev) => this._set("accent", ev.target.checked ? "#f59e0b" : null)}
-                />
-              </span>
-            </label>
-            ${this._switch(s, "hover_motion", this.t("motion"))}
-          </div>
-
-          <div class="card">
-            <h2>${this.t("phone")}</h2>
-            <p class="hint">${this.t("phone_hint")}</p>
-            ${this._slider(s, "mobile_width", this.t("mobile_width"), 240, 360, "px")}
-            ${this._slider(s, "mobile_text_size", this.t("mobile_text_size"), 12, 20, "px")}
-            ${this._switch(s, "mobile_blur", this.t("mobile_blur"))}
-          </div>
-
-          <div class="card">
-            <h2>${this.t("groups")}</h2>
-            <p class="hint">${this.t("groups_hint")}</p>
-            <ss-groups-editor
-              .items=${this._items()}
-              .categories=${s.categories}
-              .t=${this.t}
-              @change=${(ev) => this._edit(ev.detail)}
-            ></ss-groups-editor>
-          </div>
+          ${this._steps(
+            [
+              {
+                title: this.t("shape"),
+                summary: s.floating ? this.t("floating") : "",
+                content: html`
+                  ${this._switch(s, "floating", this.t("floating"), this.t("floating_hint"))}
+                  ${this._slider(s, "inset", this.t("inset"), 0, 24, "px", !s.floating)}
+                  ${this._slider(s, "radius", this.t("radius"), 0, 32, "px", !s.floating)}
+                `,
+              },
+              {
+                title: this.t("glass"),
+                content: html`
+                  ${this._slider(s, "blur", this.t("blur"), 0, 40, "px")}
+                  ${this._slider(s, "opacity", this.t("opacity"), 40, 100, "%", false, this.t("opacity_hint"))}
+                  ${this._switch(s, "glass_cards", this.t("glass_cards"), this.t("glass_cards_hint"))}
+                `,
+              },
+              {
+                title: this.t("active"),
+                content: html`
+                  ${this._segment(s, "highlight", [
+                    ["soft", this.t("highlight_soft")],
+                    ["vivid", this.t("highlight_vivid")],
+                  ])}
+                  <label class="row">
+                    <span>
+                      ${this.t("own_accent")}
+                      <small>${this.t("own_accent_hint")}</small>
+                    </span>
+                    <span class="inline">
+                      ${s.accent
+                        ? html`<input type="color" .value=${s.accent} @input=${(ev) => this._set("accent", ev.target.value)} />`
+                        : nothing}
+                      <input
+                        type="checkbox"
+                        class="switch"
+                        .checked=${Boolean(s.accent)}
+                        @change=${(ev) => this._set("accent", ev.target.checked ? "#f59e0b" : null)}
+                      />
+                    </span>
+                  </label>
+                  ${this._switch(s, "hover_motion", this.t("motion"))}
+                `,
+              },
+              {
+                title: this.t("phone"),
+                content: html`
+                  <p class="hint">${this.t("phone_hint")}</p>
+                  ${this._slider(s, "mobile_width", this.t("mobile_width"), 240, 360, "px")}
+                  ${this._slider(s, "mobile_text_size", this.t("mobile_text_size"), 12, 20, "px")}
+                  ${this._switch(s, "mobile_blur", this.t("mobile_blur"))}
+                `,
+              },
+              {
+                title: this.t("groups"),
+                content: html`
+                  <p class="hint">${this.t("groups_hint")}</p>
+                  <ss-groups-editor
+                    .items=${this._items()}
+                    .categories=${s.categories}
+                    .t=${this.t}
+                    @change=${(ev) => this._edit(ev.detail)}
+                  ></ss-groups-editor>
+                `,
+              },
+            ],
+            this._step,
+            (step) => (this._step = step),
+            html`<button class="primary next" ?disabled=${this._busy || !this.dirty} @click=${() => this._save()}>
+              ${this.t("save")}
+            </button>`
+          )}
         </div>
 
         <aside class="card preview">

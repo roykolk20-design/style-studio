@@ -37,17 +37,18 @@ const themes = panel.locator("ss-themes-tab");
 await themes.locator(".intro").waitFor();
 await page.waitForTimeout(1000);
 
-// Make a theme from the pink preset and save it.
-await themes.getByRole("button", { name: "Nieuw thema" }).click();
+// Make a theme from the pink preset, step by step, and save it.
+await themes.locator('[data-choice="new"]').click();
 await themes.locator('[data-preset="pink"]').click();
+for (let i = 0; i < 3; i += 1) await themes.getByRole("button", { name: "Volgende" }).click();
 // A new name each run; an existing name is (rightly) refused.
 const NAME = `Roze ${new Date().toISOString().slice(11, 19).replace(/:/g, "")}`;
 await themes.getByRole("textbox", { name: "Naam", exact: true }).fill(NAME);
-await themes.getByRole("button", { name: "Opslaan" }).click();
+await themes.getByRole("button", { name: "Opslaan", exact: true }).click();
 await page.waitForTimeout(3000);
-const chips = await themes.locator(".chip").allInnerTexts();
-console.log("theme chips:", chips.map((c) => c.replace(/\s+/g, " ").trim()));
-check(chips.some((c) => c.includes(NAME) && !c.includes("niet geladen")), "saved theme is loaded");
+// After saving, the list of themes to use; it is there when Home Assistant loaded it.
+const row = themes.locator(`.use-row[data-theme="${NAME}"]`);
+check((await row.count()) === 1 && (await row.getByRole("button", { name: "Voor mij gebruiken" }).isEnabled()), "saved theme is loaded");
 if (shots) await page.screenshot({ path: `${shots}/real-themes.png` });
 
 // Per person: the new theme must be in the list.

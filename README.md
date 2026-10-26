@@ -3,7 +3,7 @@
 # Style Studio for Home Assistant
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
-![Version](https://img.shields.io/badge/version-0.6.1-F59E0B)
+![Version](https://img.shields.io/badge/version-0.7.0-F59E0B)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.10%2B-18BCF2)
 
 Set the look of your whole Home Assistant from one panel: menu, top bar, cards,
@@ -139,7 +139,15 @@ add-on the same way. Its settings then show up in the panel's *Zijbalk* tab.
 
 ## Using it
 
-Open **Stijl** in the sidebar.
+Open **Stijl** in the sidebar. Every tab starts with **"Wat wil je doen?"**
+(what do you want to do?) and a few big buttons. After a choice you go
+through short, numbered steps; only the current step is open, with
+**Volgende** (next) to go on, and the preview beside it. Settings most people
+never need sit under **Meer opties** (more options). **Terug** brings you back
+to the start. Icons are picked from a grid or by searching, for example
+"badkamer" or "bath".
+
+![What do you want to do?](images/rooms-start.png)
 
 ### Themes
 

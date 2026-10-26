@@ -57,6 +57,73 @@ export class TabBase extends LitElement {
     }
   }
 
+  /**
+   * The start of a tab: "what do you want to do?" with a big button per
+   * choice. items: [{ key, icon, title, text }].
+   */
+  _choices(title, items, pick) {
+    return html`
+      <h2 class="choices-title">${title}</h2>
+      <div class="choices">
+        ${items.map(
+          (item) => html`<button class="choice" data-choice=${item.key} @click=${() => pick(item.key)}>
+            <ha-icon .icon=${item.icon}></ha-icon>
+            <b>${item.title}</b>
+            <span>${item.text}</span>
+          </button>`
+        )}
+      </div>
+    `;
+  }
+
+  _back(label, go) {
+    return html`<button class="back" @click=${go}>
+      <ha-icon icon="mdi:arrow-left"></ha-icon>${label}
+    </button>`;
+  }
+
+  /**
+   * Numbered steps; only the current one is open. Done steps fold to their
+   * title and a summary and open again on a click.
+   * steps: [{ title, summary, content, ready }]; `ready` false hides Volgende.
+   */
+  _steps(steps, current, go, finish = nothing) {
+    return html`<ol class="steps">
+      ${steps.map((step, index) => {
+        const state = index < current ? "done" : index === current ? "open" : "later";
+        return html`<li class="step ${state}">
+          <button class="step-head" ?disabled=${state === "later"} @click=${() => go(index)}>
+            <span class="number">${state === "done" ? html`<ha-icon icon="mdi:check"></ha-icon>` : index + 1}</span>
+            <span class="step-title">${step.title}</span>
+            ${state === "done" && step.summary ? html`<small class="step-summary">${step.summary}</small>` : nothing}
+          </button>
+          ${state === "open"
+            ? html`<div class="step-body">
+                ${step.content}
+                ${index < steps.length - 1
+                  ? html`<button
+                      class="primary next"
+                      ?disabled=${step.ready === false}
+                      @click=${() => go(index + 1)}
+                    >
+                      ${this.t("next")}
+                    </button>`
+                  : finish}
+              </div>`
+            : nothing}
+        </li>`;
+      })}
+    </ol>`;
+  }
+
+  /** Settings most people never need, folded away. */
+  _more(content) {
+    return html`<details class="more">
+      <summary>${this.t("more_options")}</summary>
+      ${content}
+    </details>`;
+  }
+
   // Override to change one setting of the draft.
   _set() {}
 
@@ -473,6 +540,155 @@ export class TabBase extends LitElement {
       flex: 1;
       min-width: 120px;
       color: var(--secondary-text-color);
+    }
+
+    .choices-title {
+      margin: 8px 0 12px;
+      font-size: 18px;
+    }
+
+    .choices {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .choice {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 6px;
+      padding: 18px;
+      text-align: start;
+      border-radius: var(--ss-radius, 12px);
+      border: 1px solid var(--divider-color);
+      background: var(--ha-card-background, var(--card-background-color));
+      transition: border-color 120ms, transform 120ms;
+    }
+
+    .choice:hover {
+      border-color: var(--primary-color);
+      transform: translateY(-1px);
+    }
+
+    .choice ha-icon {
+      color: var(--primary-color);
+      --mdc-icon-size: 32px;
+      margin-bottom: 4px;
+    }
+
+    .choice b {
+      font-size: 16px;
+    }
+
+    .choice span {
+      color: var(--secondary-text-color);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0 0 12px;
+      padding: 6px 10px 6px 4px;
+      border-radius: 999px;
+      color: var(--primary-color);
+      font-weight: 500;
+    }
+
+    .steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .step {
+      border-radius: var(--ss-radius, 12px);
+      border: 1px solid var(--divider-color);
+      background: var(--ha-card-background, var(--card-background-color));
+    }
+
+    .step.open {
+      border-color: var(--primary-color);
+    }
+
+    .step.later {
+      opacity: 0.55;
+    }
+
+    .step-head {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      width: 100%;
+      padding: 14px 16px;
+      text-align: start;
+    }
+
+    .step-head:disabled {
+      opacity: 1;
+    }
+
+    .number {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      background: var(--secondary-background-color);
+      font-weight: 600;
+      --mdc-icon-size: 18px;
+    }
+
+    .step.open .number,
+    .step.done .number {
+      background: var(--primary-color);
+      color: var(--text-primary-color, #fff);
+    }
+
+    .step-title {
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    .step-summary {
+      flex-basis: 100%;
+      margin: 0 0 0 40px;
+    }
+
+    .step-body {
+      padding: 0 16px 16px 56px;
+    }
+
+    @media (max-width: 600px) {
+      .step-body {
+        padding-left: 16px;
+      }
+    }
+
+    .next {
+      margin-top: 12px;
+    }
+
+    .more {
+      margin-top: 12px;
+      border-top: 1px solid var(--divider-color);
+      padding-top: 8px;
+    }
+
+    .more summary {
+      cursor: pointer;
+      color: var(--secondary-text-color);
+      font-size: 14px;
+      padding: 6px 0;
     }
   `;
 }
