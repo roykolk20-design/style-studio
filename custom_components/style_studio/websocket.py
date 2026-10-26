@@ -10,6 +10,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.loader import IntegrationNotFound, async_get_integration
 
+from . import people
 from .const import DOMAIN, VERSION
 from .glass import GLASS_DOMAIN, GLASS_MIN_VERSION, glass_entry, normalize, to_options, to_sidebar
 from .store import StyleStore
@@ -39,6 +40,7 @@ def async_register(hass: HomeAssistant) -> None:
         ws_themes_set_default,
     ):
         websocket_api.async_register_command(hass, command)
+    people.async_register(hass)
 
 
 def _store(hass: HomeAssistant) -> StyleStore:

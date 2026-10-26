@@ -113,7 +113,38 @@
   });
   window.__themes = () => ({ themes, defaultTheme });
 
+  // People: Roy is logged in here; Joyce has used Home Assistant on her phone.
+  const VERSION = (await (await fetch("/custom_components/style_studio/manifest.json")).json()).version;
+  const users = [
+    { id: "8faf3d60", name: "Roy", is_admin: true },
+    { id: "3a122b8e", name: "Joyce", is_admin: false },
+  ];
+  let persons = {};
+  const peopleHistory = [];
+  const reports = {
+    joyce: {
+      device: "joyce00001", user_id: "3a122b8e", at: new Date(Date.now() - 3600e3).toISOString(),
+      version: VERSION, app: true, theme: "Licht Roze",
+      sidebar: { panelOrder: ["lovelace", "map"], hiddenPanels: ["logbook", "history"] },
+    },
+  };
+  let userSidebar = { panelOrder: ["lovelace", "energy"], hiddenPanels: [] };
+  const personListeners = [];
+  const pushPerson = () =>
+    personListeners.forEach((cb) => cb({ version: VERSION, ...(persons[users[0].id] ?? {}) }));
+  const peopleState = () => ({
+    users,
+    persons,
+    reports: Object.values(reports).sort((a, b) => b.at.localeCompare(a.at)),
+    themes: [...themes.map((t) => t.name), ...Object.keys(others)].sort(),
+    history: peopleHistory.length,
+    version: VERSION,
+  });
+  window.__people = () => ({ persons, reports, userSidebar, appliedTheme: window.__appliedTheme });
+
   const hass = {
+    user: users[0],
+    selectedTheme: { theme: "Licht Warm" },
     language: "nl",
     locale: { language: "nl" },
     panels,
@@ -121,10 +152,45 @@
     async callWS(msg) {
       switch (msg.type) {
         case "frontend/get_user_data":
-          return { value: { panelOrder: ["lovelace", "energy"], hiddenPanels: [] } };
+          return { value: structuredClone(userSidebar) };
+        case "frontend/set_user_data":
+          userSidebar = structuredClone(msg.value);
+          return null;
+        case "style_studio/people/get":
+          return peopleState();
+        case "style_studio/people/save": {
+          peopleHistory.push(structuredClone(persons));
+          const now = new Date().toISOString();
+          const next = {};
+          for (const [id, value] of Object.entries(msg.persons)) {
+            const old = persons[id] ?? {};
+            const person = {};
+            for (const key of ["theme", "sidebar"]) {
+              if (value[key] == null) continue;
+              person[key] = value[key];
+              person[`${key}_updated`] =
+                JSON.stringify(old[key]) === JSON.stringify(value[key]) ? old[`${key}_updated`] : now;
+            }
+            if (Object.keys(person).length) next[id] = person;
+          }
+          persons = next;
+          pushPerson();
+          return peopleState();
+        }
+        case "style_studio/people/undo":
+          if (!peopleHistory.length) return { restored: false, ...peopleState() };
+          persons = peopleHistory.pop();
+          pushPerson();
+          return { restored: true, ...peopleState() };
+        case "style_studio/person/report":
+          reports[msg.device] = {
+            device: msg.device, user_id: users[0].id, at: new Date().toISOString(), version: msg.version,
+            app: msg.app, theme: msg.theme, sidebar: msg.sidebar,
+          };
+          return null;
         case "style_studio/get":
           return {
-            version: "0.1.0",
+            version: VERSION,
             glass_sidebar: {
               version: glassState === "missing" ? null : glassState === "old" ? "1.2.1" : "1.4.0",
               min_version: "1.4.0",
@@ -175,6 +241,11 @@
     },
     connection: {
       subscribeMessage(cb, msg) {
+        if (msg.type === "style_studio/person/subscribe") {
+          personListeners.push(cb);
+          setTimeout(pushPerson);
+          return Promise.resolve(() => {});
+        }
         if (msg.type !== "glass_sidebar/subscribe") return Promise.reject(new Error(msg.type));
         listeners.push(cb);
         setTimeout(push);
@@ -205,8 +276,10 @@
         width: var(--ha-sidebar-width); flex-shrink: 0; box-sizing: border-box; height: 100vh;
         position: sticky; top: 0; border-inline-end: 1px solid var(--divider-color);
       }
+      /* Like Home Assistant: the panel gets a screen-high box that cuts off
+         overflow, so the panel has to scroll by itself. */
       .app-content {
-        flex: 1; min-width: 0;
+        flex: 1; min-width: 0; height: 100vh; overflow: hidden;
         ${params.get("page") === "dark" ? "background: radial-gradient(circle at 70% 30%, #2b3440, #0d1117 70%);" : ""}
       }
     </style>
@@ -239,7 +312,13 @@
 
   const panel = mainRoot.querySelector("style-studio-panel");
   panel.narrow = narrow;
+  // HA's own handler for "settheme": remember the theme the runtime picked.
+  ha.addEventListener("settheme", (ev) => {
+    window.__appliedTheme = ev.detail.theme;
+    hass.selectedTheme = { theme: ev.detail.theme };
+  });
   await import("/glass_sidebar/sidebar.js");
+  await import("/custom_components/style_studio/www/person.js");
   await import("/custom_components/style_studio/www/studio-panel.js");
   panel.hass = hass;
 </script>

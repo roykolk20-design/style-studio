@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.0]
+
+### New
+
+- **Per person** tab: a theme and a sidebar order for each person, or copy
+  everything from someone else. A small script applies it in their own
+  browser the next time they open Home Assistant, once per device, and reports
+  back what each device uses and which version it runs.
+- **Use for me** puts a saved theme on your own screen right away.
+
+### Fixed
+
+- The panel now scrolls by itself. In Home Assistant the Save bar could end up
+  out of reach, so changes seemed to do nothing.
+- With unsaved changes, *New theme* asks right below the buttons instead of
+  in the bar at the bottom.
+
 ## [0.1.0]
 
 First version: phase 1 (base), phase 2 (sidebar) and phase 3 (themes).

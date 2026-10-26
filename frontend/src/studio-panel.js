@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
+import "./people-tab.js";
 import "./sidebar-tab.js";
 import "./themes-tab.js";
 import { translator } from "./strings.js";
@@ -69,10 +70,10 @@ class StudioPanel extends LitElement {
 
   _content() {
     return html`
-      ${this._data.version !== VERSION
+      ${this._staleVersion()
         ? html`<div class="warning">
             <ha-icon icon="mdi:alert-outline"></ha-icon>
-            ${this.t("warn_old_panel", { old: VERSION, new: this._data.version })}
+            ${this.t("warn_old_panel", { old: this._staleVersion(), new: this._data.version })}
           </div>`
         : nothing}
       <nav class="tabs">
@@ -104,10 +105,20 @@ class StudioPanel extends LitElement {
     `;
   }
 
+  // The panel or the per-person script in this browser is older than the server.
+  _staleVersion() {
+    const runtime = window.__styleStudio?.version;
+    if (VERSION !== this._data.version) return VERSION;
+    if (runtime && runtime !== this._data.version) return runtime;
+    return null;
+  }
+
   _tabContent() {
     switch (this._tab) {
       case "themes":
         return html`<ss-themes-tab .hass=${this.hass} .narrow=${this.narrow}></ss-themes-tab>`;
+      case "people":
+        return html`<ss-people-tab .hass=${this.hass} .narrow=${this.narrow}></ss-people-tab>`;
       case "sidebar":
         return html`<ss-sidebar-tab
           .hass=${this.hass}
@@ -121,10 +132,15 @@ class StudioPanel extends LitElement {
   }
 
   static styles = css`
+    /* Home Assistant gives a panel a fixed-height box and cuts off what
+       sticks out, so the panel scrolls by itself. That also keeps the Save
+       bar at the bottom of the screen. */
     :host {
       display: flex;
       flex-direction: column;
-      min-height: 100vh;
+      height: 100%;
+      overflow-y: auto;
+      box-sizing: border-box;
       background: var(--primary-background-color);
       color: var(--primary-text-color);
       font-family: var(--ha-font-family-body, Roboto, sans-serif);

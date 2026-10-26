@@ -1,4 +1,4 @@
-// The version lives in three places; the ?v= in the JS URLs depends on it.
+// The version lives in four places; the ?v= in the JS URLs depends on it.
 import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -6,6 +6,7 @@ const versions = {
   "manifest.json": JSON.parse(read("custom_components/style_studio/manifest.json")).version,
   "const.py": read("custom_components/style_studio/const.py").match(/^VERSION = "(.+)"/m)?.[1],
   "frontend/src/version.js": read("frontend/src/version.js").match(/VERSION = "(.+)"/)?.[1],
+  "www/person.js": read("custom_components/style_studio/www/person.js").match(/const VERSION = "(.+)"/)?.[1],
 };
 
 const unique = new Set(Object.values(versions));

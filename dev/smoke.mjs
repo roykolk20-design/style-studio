@@ -57,7 +57,8 @@ async function open(width, query = "", tabName = "Zijbalk") {
   if (tabName !== "Thema's") {
     await panel.locator("nav.tabs").getByRole("button", { name: tabName }).click();
   }
-  await panel.locator(tabName === "Thema's" ? "ss-themes-tab .intro" : "ss-sidebar-tab .card").first().waitFor();
+  const ready = { "Thema's": "ss-themes-tab .intro", "Per persoon": "ss-people-tab .intro" };
+  await panel.locator(ready[tabName] ?? "ss-sidebar-tab .card").first().waitFor();
   await tab.waitForTimeout(300);
   return { ctx, tab, errors, panel };
 }
@@ -90,6 +91,34 @@ for (const [state, text] of [
   const { panelText } = await tab.evaluate(probe);
   check(panelText.includes(text) && !errors.length, `glass ${state}: "${text}" ${errors.join(" | ")}`);
   await ctx.close();
+}
+
+// The Save bar must be on screen without scrolling, at the top of a long
+// page too: Home Assistant cuts off a panel that doesn't scroll by itself.
+async function saveBarOnScreen(tab, panel) {
+  const button = panel.getByRole("button", { name: "Opslaan" });
+  const box = await button.boundingBox();
+  const viewport = tab.viewportSize();
+  return Boolean(box) && box.y >= 0 && box.y + box.height <= viewport.height;
+}
+
+for (const width of [430, 1920]) {
+  const { ctx, tab, panel } = await open(width, "", "Zijbalk");
+  await panel.locator('input[type="range"]').nth(1).fill("6");
+  await tab.waitForTimeout(100);
+  check(await saveBarOnScreen(tab, panel), `${width}px: Save bar on screen after a change`);
+  // A person scrolls with the wheel; the groups card at the bottom must come into view.
+  await tab.mouse.move(width / 2, 400);
+  for (let i = 0; i < 15; i += 1) await tab.mouse.wheel(0, 600);
+  await tab.waitForTimeout(300);
+  const groups = await panel.locator("ss-groups-editor").boundingBox();
+  check(Boolean(groups) && groups.y < tab.viewportSize().height, `${width}px: wheel scrolls the panel`);
+  const themes = await open(width, "", "Thema's");
+  await themes.panel.locator("ss-themes-tab").locator('[data-preset="sand"]').click();
+  await themes.tab.waitForTimeout(100);
+  check(await saveBarOnScreen(themes.tab, themes.panel), `${width}px: theme Save bar on screen`);
+  await ctx.close();
+  await themes.ctx.close();
 }
 
 // Editing: nothing changes until Save; Save goes to Glass Sidebar; undo restores.
@@ -164,6 +193,21 @@ for (const [state, text] of [
   saved = await tab.evaluate(() => window.__themes());
   check(saved.defaultTheme === "Joyce", "set as default theme");
 
+  await themesTab.getByRole("button", { name: "Voor mij gebruiken" }).click();
+  await tab.waitForTimeout(100);
+  check((await tab.evaluate(() => window.__appliedTheme)) === "Joyce", "use for me applies the theme here");
+
+  // With unsaved changes, "Nieuw thema" asks right below the buttons.
+  await themesTab.getByRole("radio", { name: "Sterk" }).click();
+  await themesTab.getByRole("button", { name: "Nieuw thema" }).click();
+  const question = themesTab.getByRole("alert");
+  const box = await question.boundingBox();
+  check(Boolean(box) && box.y + box.height <= tab.viewportSize().height, "leave question shown where you click");
+  await question.getByRole("button", { name: "Ja" }).click();
+  state = await tab.evaluate(probe);
+  check(state.panelText.includes("Begin met"), "new theme picker after confirming");
+  await themesTab.locator(".chip", { hasText: "Joyce" }).click();
+
   // Glass pop-ups give a see-through pop-up background.
   await themesTab.getByRole("radio", { name: "Glas" }).click();
   await themesTab.getByRole("button", { name: "Opslaan" }).click();
@@ -197,6 +241,45 @@ for (const [state, text] of [
   check(saved.themes.length === 2, "restored after delete");
   check(errors.length === 0, `themes: no errors ${errors.join(" | ")}`);
   if (shots) await tab.screenshot({ path: `${shots}/themes.png`, fullPage: false });
+  await ctx.close();
+}
+
+// Per person: Roy (logged in here) gets Joyce's sidebar and the pink theme;
+// the runtime in this browser applies both.
+{
+  const { ctx, tab, panel, errors } = await open(1920, "", "Per persoon");
+  const people = panel.locator("ss-people-tab");
+  let state = await tab.evaluate(probe);
+  check(state.panelText.includes("Gebruikt nu: Licht Roze"), "Joyce's reported theme shown");
+
+  await people.getByRole("combobox", { name: "Thema (Roy)" }).selectOption("Licht Roze");
+  await people.getByRole("combobox", { name: /Zijbalk.*\(Roy\)/ }).selectOption({ label: "Zoals Joyce nu" });
+  await people.getByRole("button", { name: "Opslaan" }).click();
+  await tab.waitForTimeout(2500);
+  const result = await tab.evaluate(() => window.__people());
+  check(result.persons["8faf3d60"]?.theme === "Licht Roze", "theme saved for Roy");
+  check(result.appliedTheme === "Licht Roze", `runtime applied theme (${result.appliedTheme})`);
+  check(
+    JSON.stringify(result.userSidebar) === JSON.stringify({ panelOrder: ["lovelace", "map"], hiddenPanels: ["logbook", "history"] }),
+    `runtime applied sidebar (${JSON.stringify(result.userSidebar)})`
+  );
+  const roy = Object.values(result.reports).find((r) => r.user_id === "8faf3d60");
+  check(roy?.theme === "Licht Roze" && roy.version, "runtime reported back");
+
+  // Copy everything from Joyce to... Joyce can't copy from herself; copy Roy to Joyce.
+  await people.getByRole("combobox", { name: "Alles kopiëren van (Joyce)" }).selectOption("8faf3d60");
+  await people.getByRole("button", { name: "Opslaan" }).click();
+  await tab.waitForTimeout(300);
+  const after = await tab.evaluate(() => window.__people());
+  check(after.persons["3a122b8e"]?.theme === "Licht Roze", "copy everything to Joyce");
+
+  await people.getByRole("button", { name: "Vorige versie terugzetten" }).click();
+  await people.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(300);
+  const undone = await tab.evaluate(() => window.__people());
+  check(!undone.persons["3a122b8e"], "undo removes Joyce's settings again");
+  check(errors.length === 0, `people: no errors ${errors.join(" | ")}`);
+  if (shots) await tab.screenshot({ path: `${shots}/people.png` });
   await ctx.close();
 }
 

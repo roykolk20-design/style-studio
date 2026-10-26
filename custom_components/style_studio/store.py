@@ -25,6 +25,8 @@ class StyleStore:
         self._data = await self._store.async_load() or {}
         self._data.setdefault("history", {})
         self._data.setdefault("themes", [])
+        self._data.setdefault("persons", {})
+        self._data.setdefault("reports", {})
 
     @property
     def themes(self) -> list[dict[str, Any]]:
@@ -33,6 +35,28 @@ class StyleStore:
     async def async_set_themes(self, themes: list[dict[str, Any]]) -> None:
         self._data["themes"] = themes
         await self._store.async_save(self._data)
+
+    @property
+    def persons(self) -> dict[str, dict[str, Any]]:
+        """What the admin set per user: {"theme", "sidebar", "*_updated"}."""
+        return self._data["persons"]
+
+    async def async_set_persons(self, persons: dict[str, dict[str, Any]]) -> None:
+        self._data["persons"] = persons
+        await self._store.async_save(self._data)
+
+    @property
+    def reports(self) -> dict[str, dict[str, Any]]:
+        """What each browser last told us, by device id."""
+        return self._data["reports"]
+
+    def report(self, device_id: str, report: dict[str, Any], limit: int) -> None:
+        reports = self._data["reports"]
+        reports[device_id] = report
+        for old in sorted(reports, key=lambda key: reports[key]["at"])[:-limit]:
+            del reports[old]
+        # Browsers report on every page load; no need to write each one at once.
+        self._store.async_delay_save(lambda: self._data, 30)
 
     def history_size(self, key: str) -> int:
         return len(self._data["history"].get(key, []))

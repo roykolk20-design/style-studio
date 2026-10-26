@@ -1,12 +1,13 @@
 from pathlib import Path
 
 from homeassistant.components import frontend, panel_custom
+from homeassistant.components.frontend import add_extra_js_url, remove_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from . import websocket
-from .const import DOMAIN, PANEL_ELEMENT, PANEL_PATH, PANEL_URL, URL_BASE
+from .const import DOMAIN, PANEL_ELEMENT, PANEL_PATH, PANEL_URL, RUNTIME_URL, URL_BASE
 from .store import StyleStore
 
 
@@ -25,6 +26,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await store.async_load()
     data["store"] = store
 
+    add_extra_js_url(hass, RUNTIME_URL)
     await panel_custom.async_register_panel(
         hass,
         frontend_url_path=PANEL_PATH,
@@ -38,5 +40,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    remove_extra_js_url(hass, RUNTIME_URL)
     frontend.async_remove_panel(hass, PANEL_PATH)
     return True

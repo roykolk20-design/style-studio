@@ -27,6 +27,7 @@ class ThemesTab extends TabBase {
     _wholeScreen: { state: true },
     _popup: { state: true },
     _newVar: { state: true },
+    _leaving: { state: true },
   };
 
   constructor() {
@@ -199,6 +200,7 @@ class ThemesTab extends TabBase {
     return html`
       <p class="intro">${this.t("themes_intro")}</p>
       ${this._list()}
+      ${this._leavingQuestion()}
       ${this._picking ? this._picker() : nothing}
       ${this._draft ? this._editor() : nothing}
       ${this._bar({
@@ -244,10 +246,38 @@ class ThemesTab extends TabBase {
     `;
   }
 
-  // Leaving a dirty draft asks first.
+  // Leaving a dirty draft asks first, right below the buttons you clicked.
   _pick(go) {
-    if (this.dirty) this._ask(this.t("discard_confirm"), go);
+    if (this.dirty) this._leaving = go;
     else go();
+  }
+
+  _leavingQuestion() {
+    if (!this._leaving) return nothing;
+    return html`<div class="leaving" role="alert">
+      <span>${this.t("discard_confirm")}</span>
+      <button @click=${() => (this._leaving = null)}>${this.t("no")}</button>
+      <button
+        class="primary"
+        @click=${() => {
+          const go = this._leaving;
+          this._leaving = null;
+          this._wholeScreen = false;
+          go();
+        }}
+      >
+        ${this.t("yes")}
+      </button>
+    </div>`;
+  }
+
+  // Shows the saved theme on this screen now, as if picked in the profile.
+  _useForMe() {
+    const name = this._saved.name;
+    document
+      .querySelector("home-assistant")
+      ?.dispatchEvent(new CustomEvent("settheme", { detail: { theme: name } }));
+    this._showToast(this.t("using_now", { name }));
   }
 
   _picker() {
@@ -498,6 +528,11 @@ class ThemesTab extends TabBase {
       </button>`);
     }
     if (saved && !this.dirty) {
+      if (this._state.loaded.includes(saved.name)) {
+        buttons.push(html`<button ?disabled=${this._busy} @click=${this._useForMe}>
+          <ha-icon icon="mdi:account-check"></ha-icon>${this.t("use_for_me")}
+        </button>`);
+      }
       if (saved.name === this._state.default_theme) {
         buttons.push(html`<span class="note">${this.t("is_default")}</span>`);
       } else if (this._state.loaded.includes(saved.name)) {
@@ -696,6 +731,25 @@ class ThemesTab extends TabBase {
         border-radius: 999px;
         color: var(--primary-color);
         font-weight: 500;
+      }
+
+      .leaving {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px 14px;
+        margin-bottom: 16px;
+        border-radius: var(--ss-radius, 12px);
+        background: color-mix(in srgb, var(--warning-color, #ffa600) 16%, var(--card-background-color));
+      }
+
+      .leaving span {
+        flex: 1;
+      }
+
+      .leaving button:not(.primary) {
+        padding: 8px 12px;
       }
 
       .note {

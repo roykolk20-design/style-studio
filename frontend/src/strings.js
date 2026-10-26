@@ -140,7 +140,9 @@ const nl = {
   set_default_hint: "Voor iedereen die in het profiel geen eigen thema koos.",
   default_set: "{name} is nu het standaardthema",
   is_default: "Dit is het standaardthema",
-  saved_theme: "Opgeslagen in {file}",
+  saved_theme: "Opgeslagen. Kies het in je profiel, of gebruik Voor mij gebruiken.",
+  use_for_me: "Voor mij gebruiken",
+  using_now: "Dit scherm gebruikt nu {name}",
   warn_not_loaded:
     "Home Assistant heeft dit thema niet geladen. Zet in configuration.yaml: frontend: themes: !include_dir_merge_named themes, en herstart Home Assistant.",
   err_file_exists:
@@ -156,6 +158,28 @@ const nl = {
   pv_weather: "Zonnig, 21°",
   pv_switch: "Ventilator",
   pv_popup: "Woonkamer",
+
+  people_intro:
+    "Geef iedereen een eigen thema en zijbalkvolgorde. Het wordt toegepast als die persoon Home Assistant opent, op elk apparaat één keer; daarna kan diegene in het profiel nog zelf iets anders kiezen.",
+  person_theme: "Thema",
+  person_sidebar: "Zijbalk (volgorde en verborgen items)",
+  self_choice: "Zelf kiezen",
+  like_person: "Zoals {name} nu",
+  copy_all_from: "Alles kopiëren van",
+  pick_person: "Kies een persoon",
+  now_uses: "Gebruikt nu: {value}",
+  ha_default: "standaard",
+  unknown: "onbekend",
+  hidden_count: "{count} verborgen",
+  order_count: "{count} in eigen volgorde",
+  applied: "Toegepast",
+  pending: "Wordt toegepast als {name} Home Assistant opent",
+  never_seen: "Nog niet gezien sinds Style Studio er is",
+  last_seen: "Laatst gezien {when}",
+  devices: "{count} apparaten",
+  device_one: "1 apparaat",
+  app_badge: "app",
+  no_themes_yet: "Er zijn nog geen thema's geladen. Maak er eerst een bij Thema's.",
 
   warn_old_panel:
     "Dit scherm gebruikt een oude versie van het paneel ({old}, server {new}). Herlaad de pagina. In de Companion-app: Instellingen › Companion-app › Probleemoplossing › Frontend-cache wissen.",
@@ -302,7 +326,9 @@ const en = {
   set_default_hint: "For everyone who didn't pick a theme in their profile.",
   default_set: "{name} is now the default theme",
   is_default: "This is the default theme",
-  saved_theme: "Saved in {file}",
+  saved_theme: "Saved. Pick it in your profile, or use Use for me.",
+  use_for_me: "Use for me",
+  using_now: "This screen now uses {name}",
   warn_not_loaded:
     "Home Assistant didn't load this theme. Add to configuration.yaml: frontend: themes: !include_dir_merge_named themes, and restart Home Assistant.",
   err_file_exists:
@@ -318,6 +344,28 @@ const en = {
   pv_weather: "Sunny, 21°",
   pv_switch: "Fan",
   pv_popup: "Living room",
+
+  people_intro:
+    "Give everyone their own theme and sidebar order. It is applied when that person opens Home Assistant, once on each device; after that they can still pick something else in their profile.",
+  person_theme: "Theme",
+  person_sidebar: "Sidebar (order and hidden items)",
+  self_choice: "Their own choice",
+  like_person: "Like {name} now",
+  copy_all_from: "Copy everything from",
+  pick_person: "Pick a person",
+  now_uses: "Uses now: {value}",
+  ha_default: "default",
+  unknown: "unknown",
+  hidden_count: "{count} hidden",
+  order_count: "{count} in own order",
+  applied: "Applied",
+  pending: "Applied when {name} opens Home Assistant",
+  never_seen: "Not seen since Style Studio was added",
+  last_seen: "Last seen {when}",
+  devices: "{count} devices",
+  device_one: "1 device",
+  app_badge: "app",
+  no_themes_yet: "No themes are loaded yet. Make one under Themes first.",
 
   warn_old_panel:
     "This screen runs an old version of the panel ({old}, server {new}). Reload the page. In the Companion app: Settings › Companion app › Troubleshooting › Reset frontend cache.",

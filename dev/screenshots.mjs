@@ -73,6 +73,20 @@ async function open(width, height, tabName = "Thema's") {
   await page.close();
 }
 
+// Per person, after picking a theme for Roy and Joyce.
+{
+  const { page, panel } = await open(1280, 800, "Per persoon");
+  const people = panel.locator("ss-people-tab");
+  await people.waitFor();
+  await page.waitForTimeout(300);
+  await people.getByRole("combobox", { name: "Thema (Roy)" }).selectOption("Licht Warm");
+  await people.getByRole("combobox", { name: "Thema (Joyce)" }).selectOption("Licht Roze");
+  await people.getByRole("button", { name: "Opslaan" }).click();
+  await page.waitForTimeout(5000);
+  await page.screenshot({ path: out("people.png") });
+  await page.close();
+}
+
 // Phone.
 {
   const { page, themes } = await open(430, 860);

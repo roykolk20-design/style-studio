@@ -3,7 +3,7 @@
 # Style Studio for Home Assistant
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
-![Version](https://img.shields.io/badge/version-0.1.0-F59E0B)
+![Version](https://img.shields.io/badge/version-0.2.0-F59E0B)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.10%2B-18BCF2)
 
 Set the look of your whole Home Assistant from one panel: menu, top bar, cards,
@@ -39,7 +39,13 @@ each lives in its own repository and installs on its own.
 - **Safe saving.** Themes go to their own file, `themes/style_studio.yaml`.
   Your own theme files are only read, never changed. Every save makes a backup
   and can be undone from the panel.
-- **Default theme** for everyone with one button.
+- **Default theme** for everyone with one button, or **Use for me** to see it
+  on your own screen right away.
+- **Per person**: give everyone their own theme and sidebar order, for example
+  warm sand for one and soft pink for another, or copy everything from one
+  person to the next. It is applied when that person opens Home Assistant,
+  once on each device, so they can still pick something else in their
+  profile. The panel shows what each person uses now and when it was applied.
 - **Sidebar** settings for the Glass Sidebar add-on: floating, corners, blur,
   highlight, phone menu and groups with headings, with a preview at phone,
   tablet and desktop width.
@@ -54,9 +60,13 @@ each lives in its own repository and installs on its own.
 | --- | --- |
 | ![Every color by group](images/all-colors.png) | ![Presets](images/presets.png) |
 
-| Sidebar (Glass Sidebar add-on) | Phone |
+| Per person | Sidebar (Glass Sidebar add-on) |
 | --- | --- |
-| ![Sidebar settings](images/sidebar.png) | ![Phone](images/mobile.png) |
+| ![Per person](images/people.png) | ![Sidebar settings](images/sidebar.png) |
+
+| Phone |
+| --- |
+| ![Phone](images/mobile.png) |
 
 ## Installation
 
@@ -115,14 +125,29 @@ Open **Stijl** in the sidebar.
    on your whole screen.
 5. Choose **Opslaan** (save). The theme is written and Home Assistant reloads
    its themes.
-6. Pick it in your profile, or choose **Standaard voor iedereen** to make it
-   the default for everyone who didn't choose a theme themselves.
+6. Choose **Voor mij gebruiken** (use for me) to see it on your screen, pick it
+   in your profile, or choose **Standaard voor iedereen** to make it the default
+   for everyone who didn't choose a theme themselves.
 
 *Vorige versie terugzetten* undoes the last save or delete. Older copies of the
 themes file are kept in `config/style_studio/backups/`.
 
 A few places in Home Assistant's own settings pages use fixed colors that no
 theme can change.
+
+### Per person
+
+The **Per persoon** tab lists everyone with a login. For each person pick a
+**theme** and a **sidebar** order (copied from how someone's sidebar looks
+now), or copy everything from another person, then choose **Opslaan**. Each
+person's browser applies it the next time they open Home Assistant: the theme
+the way the profile page does, the sidebar order through Home Assistant's own
+user settings. A green *Toegepast* (applied) appears once their device has
+reported back. *Zelf kiezen* leaves it to the person.
+
+This needs a small script in every browser, which Style Studio adds by
+itself. It also tells the panel which version each device runs, so you can
+see when the companion app still uses old files.
 
 ### Sidebar
 
@@ -137,7 +162,6 @@ The panel already shows tabs for these; they arrive in later versions:
 
 - **Rooms and pop-ups**: room tiles and Bubble Card pop-ups from a few choices.
 - **Climate**: a pop-up per air conditioner with modes, fan and swing.
-- **People**: each person their own theme and sidebar.
 - **Check and restore**: find conflicts such as card-mod sidebar styles, and
   restore backups.
 
