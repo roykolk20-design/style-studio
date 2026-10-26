@@ -1,4 +1,4 @@
-"""Style Studio's own storage: for now the history behind Restore."""
+"""Style Studio's own storage: themes and the history behind Restore."""
 
 from datetime import datetime, timezone
 from typing import Any
@@ -9,8 +9,11 @@ from homeassistant.helpers.storage import Store
 from .const import HISTORY_LIMIT, STORAGE_KEY, STORAGE_VERSION
 
 # Stored layout:
-# {"history": {"<what>": [{"saved_at": "...", "value": ...}, ...]}}
-# "<what>" is for example "glass_sidebar"; the newest entry is last.
+# {
+#   "themes": [{"id", "name", "base", "overrides", "vars"}, ...],
+#   "history": {"<what>": [{"saved_at": "...", "value": ...}, ...]},
+# }
+# "<what>" is for example "glass_sidebar" or "themes"; the newest entry is last.
 
 
 class StyleStore:
@@ -21,6 +24,15 @@ class StyleStore:
     async def async_load(self) -> None:
         self._data = await self._store.async_load() or {}
         self._data.setdefault("history", {})
+        self._data.setdefault("themes", [])
+
+    @property
+    def themes(self) -> list[dict[str, Any]]:
+        return self._data["themes"]
+
+    async def async_set_themes(self, themes: list[dict[str, Any]]) -> None:
+        self._data["themes"] = themes
+        await self._store.async_save(self._data)
 
     def history_size(self, key: str) -> int:
         return len(self._data["history"].get(key, []))

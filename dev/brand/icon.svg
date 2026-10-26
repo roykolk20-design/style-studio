@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- Style Studio: a fan of color swatches on a warm sand-to-pink tile.
+       Same shape language as the Glass Sidebar icon. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="0.55" stop-color="#f59e0b"/>
+      <stop offset="1" stop-color="#e8749e"/>
+    </linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#7c2d12" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#tile)"/>
+  <g filter="url(#shadow)">
+    <!-- Back swatch -->
+    <g transform="rotate(-24 128 196)">
+      <rect x="92" y="40" width="72" height="168" rx="16" fill="#ffffff" fill-opacity="0.45"/>
+      <rect x="102" y="52" width="52" height="52" rx="10" fill="#e8749e"/>
+    </g>
+    <!-- Middle swatch -->
+    <g transform="rotate(-8 128 196)">
+      <rect x="92" y="40" width="72" height="168" rx="16" fill="#ffffff" fill-opacity="0.7"/>
+      <rect x="102" y="52" width="52" height="52" rx="10" fill="#fbbf24"/>
+    </g>
+    <!-- Front swatch -->
+    <g transform="rotate(10 128 196)">
+      <rect x="92" y="40" width="72" height="168" rx="16" fill="#fffaf2"/>
+      <rect x="102" y="52" width="52" height="52" rx="10" fill="#f4efe6"/>
+      <rect x="102" y="116" width="52" height="8" rx="4" fill="#d6c7b0"/>
+      <rect x="102" y="132" width="36" height="8" rx="4" fill="#e6dccb"/>
+      <circle cx="128" cy="184" r="8" fill="#f59e0b"/>
+    </g>
+  </g>
+</svg>

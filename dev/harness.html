@@ -32,12 +32,24 @@
 <body>
 <home-assistant></home-assistant>
 <script type="module">
-  // Placeholder icons: a small square with the icon name as tooltip.
+  // ha-icon with the real Material Design Icons, like Home Assistant.
+  const mdi = await import("/node_modules/@mdi/js/mdi.js");
   customElements.define("ha-icon", class extends HTMLElement {
-    set icon(value) { this.title = value; }
+    static observedAttributes = ["icon"];
+    // Drawing while Lit clones a template isn't allowed, so only once connected.
+    set icon(value) { this._icon = value; if (this.isConnected) this._draw(); }
+    get icon() { return this._icon; }
+    attributeChangedCallback(_, __, value) { this.icon = value; }
     connectedCallback() {
       this.style.cssText =
-        "display:inline-block;width:20px;height:20px;border-radius:5px;background:currentColor;opacity:.55;flex-shrink:0";
+        "display:inline-flex;width:var(--mdc-icon-size,24px);height:var(--mdc-icon-size,24px);flex-shrink:0";
+      this._draw();
+    }
+    _draw() {
+      const name = "mdi" + String(this._icon ?? "").replace(/^mdi:/, "")
+        .split(/[-_]/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join("");
+      const path = mdi[name] ?? mdi.mdiHelpCircleOutline;
+      this.innerHTML = `<svg viewBox="0 0 24 24" width="100%" height="100%"><path fill="currentColor" d="${path}"/></svg>`;
     }
   });
 
@@ -76,6 +88,31 @@
     listeners.forEach((cb) => cb(db.sidebar ? { enabled: true, version: "1.4.0", ...db.sidebar } : { enabled: false }));
   window.__db = db;
 
+  // Themes: the user's own two files, and what Style Studio made.
+  const others = {
+    "Licht Warm": {
+      "primary-background-color": "#f4efe6", "card-background-color": "#fffaf2",
+      "primary-text-color": "#3b3127", "primary-color": "#f59e0b",
+      "sidebar-background-color": "#fbf6ec", "bubble-pop-up-main-background-color": "#fffaf2",
+    },
+    "Licht Roze": {
+      "primary-background-color": "#fbf1f4", "card-background-color": "#fffafc",
+      "primary-text-color": "#3d2b33", "primary-color": "#e8749e",
+    },
+  };
+  let themes = [];
+  const themeHistory = [];
+  let defaultTheme = "default";
+  const themesState = () => ({
+    themes,
+    loaded: themes.map((t) => t.name),
+    others,
+    default_theme: defaultTheme,
+    history: themeHistory.length,
+    file: "/config/themes/style_studio.yaml",
+  });
+  window.__themes = () => ({ themes, defaultTheme });
+
   const hass = {
     language: "nl",
     locale: { language: "nl" },
@@ -102,6 +139,31 @@
           db.sidebar = msg.sidebar;
           push();
           return { sidebar: msg.sidebar };
+        case "style_studio/themes/get":
+          return themesState();
+        case "style_studio/themes/save": {
+          const theme = { ...msg.theme, id: msg.theme.id ?? Math.random().toString(16).slice(2, 10) };
+          const taken = [...themes.filter((t) => t.id !== theme.id).map((t) => t.name), ...Object.keys(others)];
+          if (taken.some((n) => n.toLowerCase() === theme.name.toLowerCase())) {
+            throw Object.assign(new Error("name taken"), { code: "name_taken" });
+          }
+          themeHistory.push(structuredClone(themes));
+          const index = themes.findIndex((t) => t.id === theme.id);
+          if (index === -1) themes.push(theme);
+          else themes[index] = theme;
+          return { theme, ...themesState() };
+        }
+        case "style_studio/themes/delete":
+          themeHistory.push(structuredClone(themes));
+          themes = themes.filter((t) => t.id !== msg.theme_id);
+          return themesState();
+        case "style_studio/themes/undo":
+          if (!themeHistory.length) return { restored: false, ...themesState() };
+          themes = themeHistory.pop();
+          return { restored: true, ...themesState() };
+        case "style_studio/themes/set_default":
+          defaultTheme = msg.name;
+          return themesState();
         case "style_studio/sidebar/undo": {
           if (!db.history.length) return { restored: false };
           db.sidebar = db.history.pop();
@@ -170,7 +232,7 @@
     <ha-list-nav class="before-spacer"><slot name="main-navigation">
       ${order.map((path) => `
         <ha-list-item-button id="sidebar-panel-${path}" class="${path === "style-studio" ? "selected" : ""}">
-          <ha-icon slot="start"></ha-icon>
+          <ha-icon slot="start" icon="${panels[path].icon ?? "mdi:view-dashboard"}"></ha-icon>
           <span class="item-text">${labels[`panel.${panels[path].title}`] ?? panels[path].title ?? "Overzicht"}</span>
         </ha-list-item-button>`).join("")}
     </slot></ha-list-nav>`;
