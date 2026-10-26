@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0]
+
+### New
+
+- **Climate** tab: a Bubble Card pop-up per air conditioner with temperature
+  minus and plus, modes, fan speeds and swing switches, built from
+  button-cards. Only what the device reports is offered; missing parts are
+  explained. Preview with the real cards in Home Assistant. Puts the pop-up and
+  an opener button on a dashboard view after a backup of that dashboard, and
+  replaces an earlier one instead of adding a second.
+- Dashboard backups in `config/style_studio/backups/dashboards/`.
+- The theme editor starts from the theme you use now instead of something new.
+  Colors that come fixed from a copied theme are shown, with a button to let
+  them follow the quick settings.
+- Link to Glass Sidebar's own settings page (1.5 and newer).
+
+### Fixed
+
+- Group icons and "start collapsed" from Glass Sidebar 1.5 are kept when
+  saving from the Sidebar tab.
+
 ## [0.2.0]
 
 ### New

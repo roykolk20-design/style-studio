@@ -14,7 +14,8 @@ from homeassistant.core import HomeAssistant, callback
 import homeassistant.helpers.config_validation as cv
 
 GLASS_DOMAIN = "glass_sidebar"
-# The options below match Glass Sidebar 1.4.0.
+# The options below match Glass Sidebar 1.4.0; 1.5 has its own settings page
+# with more, which Style Studio leaves alone.
 GLASS_MIN_VERSION = "1.4.0"
 
 HEX_COLOR = vol.Match(r"^#[0-9a-fA-F]{6}$")
@@ -44,10 +45,14 @@ def _int(minimum: int, maximum: int) -> vol.All:
     return vol.All(vol.Coerce(int), vol.Range(min=minimum, max=maximum))
 
 
+# Glass Sidebar 1.5 added an icon and "start collapsed" per category; they
+# are kept as they are.
 CATEGORY_SCHEMA = vol.Schema(
     {
         vol.Required("name"): vol.All(cv.string, vol.Strip, vol.Length(min=1, max=40)),
         vol.Optional("panels", default=list): [cv.string],
+        vol.Optional("icon"): vol.Any(None, vol.Match(r"^mdi:[a-z0-9-]+$")),
+        vol.Optional("collapsed"): cv.boolean,
     }
 )
 
@@ -112,7 +117,12 @@ def to_sidebar(options: dict[str, Any]) -> dict[str, Any]:
                 )
         categories = parsed
     value["categories"] = [
-        {"name": str(c["name"]), "panels": [str(p) for p in c.get("panels", [])]}
+        {
+            "name": str(c["name"]),
+            "panels": [str(p) for p in c.get("panels", [])],
+            **({"icon": c["icon"]} if c.get("icon") else {}),
+            **({"collapsed": True} if c.get("collapsed") else {}),
+        }
         for c in categories
         if isinstance(c, dict) and c.get("name")
     ]

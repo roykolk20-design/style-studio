@@ -4,6 +4,13 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 import { server } from "./serve.mjs";
 
+async function preset(themes, key) {
+  if (!(await themes.locator(`[data-preset="${key}"]`).count())) {
+    await themes.getByRole("button", { name: "Nieuw thema" }).click();
+  }
+  await themes.locator(`[data-preset="${key}"]`).click();
+}
+
 const base = "http://127.0.0.1:8123/dev/harness.html";
 const out = (name) => fileURLToPath(new URL(`../images/${name}`, import.meta.url));
 const browser = await chromium.launch({ channel: "msedge" });
@@ -20,7 +27,9 @@ async function open(width, height, tabName = "Thema's") {
 
 // Start screen of the theme editor.
 {
-  const { page } = await open(1280, 800);
+  const { page, themes } = await open(1280, 800);
+  await themes.getByRole("button", { name: "Nieuw thema" }).click();
+  await page.waitForTimeout(200);
   await page.screenshot({ path: out("presets.png") });
   await page.close();
 }
@@ -28,7 +37,7 @@ async function open(width, height, tabName = "Thema's") {
 // Editing a theme, with the pop-up in the preview.
 {
   const { page, themes } = await open(1280, 800);
-  await themes.locator('[data-preset="sand"]').click();
+  await preset(themes, "sand");
   await page.waitForTimeout(300);
   await page.screenshot({ path: out("themes.png") });
 
@@ -46,7 +55,7 @@ async function open(width, height, tabName = "Thema's") {
 // The pink theme on the whole screen, before saving.
 {
   const { page, themes } = await open(1280, 800);
-  await themes.locator('[data-preset="pink"]').click();
+  await preset(themes, "pink");
   await themes.getByRole("radio", { name: "Glas" }).click();
   await themes.getByRole("checkbox", { name: /Ook tonen op dit hele scherm/ }).check();
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -58,7 +67,7 @@ async function open(width, height, tabName = "Thema's") {
 // The dark preset.
 {
   const { page, themes } = await open(1280, 800);
-  await themes.locator('[data-preset="dark"]').click();
+  await preset(themes, "dark");
   await themes.getByRole("checkbox", { name: /Ook tonen op dit hele scherm/ }).check();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(300);
@@ -87,10 +96,20 @@ async function open(width, height, tabName = "Thema's") {
   await page.close();
 }
 
+// Climate pop-up for the LG air conditioner.
+{
+  const { page, panel } = await open(1280, 800, "Klimaat");
+  const climate = panel.locator("ss-climate-tab");
+  await climate.getByRole("button", { name: "LG Woonkamer" }).click();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: out("climate.png") });
+  await page.close();
+}
+
 // Phone.
 {
   const { page, themes } = await open(430, 860);
-  await themes.locator('[data-preset="sand"]').click();
+  await preset(themes, "sand");
   await page.waitForTimeout(300);
   await page.screenshot({ path: out("mobile.png") });
   await page.close();

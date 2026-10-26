@@ -142,7 +142,71 @@
   });
   window.__people = () => ({ persons, reports, userSidebar, appliedTheme: window.__appliedTheme });
 
+  // Devices: two air conditioners (one LG-like), lights, rooms on floors.
+  const states = {
+    "climate.woonkamer": {
+      entity_id: "climate.woonkamer", state: "cool",
+      attributes: {
+        friendly_name: "LG Woonkamer", hvac_modes: ["off", "cool", "heat", "auto", "dry", "fan_only"],
+        fan_modes: ["auto", "low", "medium", "high"], fan_mode: "auto",
+        swing_modes: ["off", "on"], swing_mode: "off",
+        swing_horizontal_modes: ["off", "on"], swing_horizontal_mode: "on",
+        temperature: 21, current_temperature: 23.5, min_temp: 16, max_temp: 30, target_temp_step: 0.5,
+      },
+    },
+    "climate.slaapkamer": {
+      entity_id: "climate.slaapkamer", state: "heat",
+      attributes: {
+        friendly_name: "Slaapkamer", hvac_modes: ["off", "heat"], temperature: 19,
+        current_temperature: 18, min_temp: 7, max_temp: 25, target_temp_step: 0.5,
+      },
+    },
+  };
+  const light = (id, name, state) =>
+    (states[id] = { entity_id: id, state, attributes: { friendly_name: name } });
+  light("light.woonkamer_plafond", "Plafondlamp", "on");
+  light("light.woonkamer_staande", "Staande lamp", "off");
+  light("light.keuken", "Keukenlamp", "on");
+  light("light.slaapkamer", "Slaapkamerlamp", "off");
+  light("light.zolder", "Zolderlamp", "off");
+  const floors = {
+    begane_grond: { floor_id: "begane_grond", name: "Begane grond", level: 0, icon: "mdi:home-floor-0" },
+    eerste: { floor_id: "eerste", name: "1e verdieping", level: 1, icon: "mdi:home-floor-1" },
+    zolder: { floor_id: "zolder", name: "Zolder", level: 2, icon: "mdi:home-roof" },
+  };
+  const areas = {
+    woonkamer: { area_id: "woonkamer", name: "Woonkamer", icon: "mdi:sofa", floor_id: "begane_grond" },
+    keuken: { area_id: "keuken", name: "Keuken", icon: "mdi:fridge", floor_id: "begane_grond" },
+    slaapkamer: { area_id: "slaapkamer", name: "Slaapkamer", icon: "mdi:bed", floor_id: "eerste" },
+    zolder: { area_id: "zolder", name: "Zolder", icon: null, floor_id: "zolder" },
+  };
+  const entities = Object.fromEntries(
+    Object.keys(states).map((id) => {
+      const area = Object.keys(areas).find((a) => id.includes(a)) ?? null;
+      return [id, { entity_id: id, area_id: area, device_id: null }];
+    })
+  );
+
+  // Dashboards: the main one has a sections view; one is in panel mode.
+  const dashboards = {
+    __main: {
+      views: [
+        { title: "Licht", path: "licht", type: "sections", max_columns: 4,
+          sections: [{ type: "grid", cards: [{ type: "heading", heading: "Thuis" }] }] },
+        { title: "Energie", path: "energie", cards: [] },
+      ],
+    },
+    "dashboard-plattegrond": { views: [{ title: "Plattegrond", type: "panel", cards: [{ type: "picture-elements" }] }] },
+  };
+  const backups = [];
+  window.__lovelace = () => ({ dashboards, backups });
+
   const hass = {
+    states,
+    entities,
+    devices: {},
+    areas,
+    floors,
     user: users[0],
     selectedTheme: { theme: "Licht Warm" },
     language: "nl",
@@ -156,6 +220,23 @@
         case "frontend/set_user_data":
           userSidebar = structuredClone(msg.value);
           return null;
+        case "lovelace/dashboards/list":
+          return [{ url_path: "dashboard-plattegrond", title: "Plattegrond", mode: "storage" }];
+        case "lovelace/config":
+          return structuredClone(dashboards[msg.url_path ?? "__main"]);
+        case "lovelace/config/save":
+          dashboards[msg.url_path ?? "__main"] = structuredClone(msg.config);
+          return null;
+        case "lovelace/resources":
+          return [];
+        case "style_studio/backups/create":
+          backups.push({ file: `${msg.key}.${backups.length}.json`, key: msg.key, data: msg.data,
+            saved_at: new Date().toISOString(), size: JSON.stringify(msg.data).length });
+          return { file: backups.at(-1).file };
+        case "style_studio/backups/list":
+          return { backups: backups.map(({ data, ...rest }) => rest).reverse() };
+        case "style_studio/backups/read":
+          return { data: backups.find((b) => b.file === msg.file).data };
         case "style_studio/people/get":
           return peopleState();
         case "style_studio/people/save": {

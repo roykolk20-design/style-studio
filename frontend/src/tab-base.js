@@ -136,7 +136,7 @@ export class TabBase extends LitElement {
    * The bar at the bottom: a question to confirm, or the tab's own buttons on
    * the left, a message in the middle and Cancel/Save when dirty.
    */
-  _bar({ left = nothing, onCancel, onSave }) {
+  _bar({ left = nothing, onCancel, onSave, canSave = this.dirty }) {
     if (this._confirm) {
       const { text, action } = this._confirm;
       return html`
@@ -156,12 +156,12 @@ export class TabBase extends LitElement {
       `;
     }
     // On a phone an empty bar would only take space.
-    if (left === nothing && !this._toast && !this.dirty) return nothing;
+    if (left === nothing && !this._toast && !canSave) return nothing;
     return html`
       <footer class="bar">
         ${left}
         <span class="grow">${this._toast ?? (this.dirty ? this.t("unsaved") : "")}</span>
-        ${this.dirty
+        ${canSave
           ? html`
               <button ?disabled=${this._busy} @click=${onCancel}>${this.t("cancel")}</button>
               <button class="primary" ?disabled=${this._busy} @click=${onSave}>

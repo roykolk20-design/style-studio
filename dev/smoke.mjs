@@ -4,6 +4,13 @@
 import { chromium } from "playwright-core";
 import { server } from "./serve.mjs";
 
+async function preset(themesTab, key) {
+  if (!(await themesTab.locator(`[data-preset="${key}"]`).count())) {
+    await themesTab.getByRole("button", { name: "Nieuw thema" }).click();
+  }
+  await themesTab.locator(`[data-preset="${key}"]`).click();
+}
+
 const shots = process.argv[2];
 const base = "http://127.0.0.1:8123/dev/harness.html";
 const browser = await chromium.launch({ channel: "msedge" });
@@ -57,7 +64,11 @@ async function open(width, query = "", tabName = "Zijbalk") {
   if (tabName !== "Thema's") {
     await panel.locator("nav.tabs").getByRole("button", { name: tabName }).click();
   }
-  const ready = { "Thema's": "ss-themes-tab .intro", "Per persoon": "ss-people-tab .intro" };
+  const ready = {
+    "Thema's": "ss-themes-tab .intro",
+    "Per persoon": "ss-people-tab .intro",
+    Klimaat: "ss-climate-tab .intro",
+  };
   await panel.locator(ready[tabName] ?? "ss-sidebar-tab .card").first().waitFor();
   await tab.waitForTimeout(300);
   return { ctx, tab, errors, panel };
@@ -114,7 +125,7 @@ for (const width of [430, 1920]) {
   const groups = await panel.locator("ss-groups-editor").boundingBox();
   check(Boolean(groups) && groups.y < tab.viewportSize().height, `${width}px: wheel scrolls the panel`);
   const themes = await open(width, "", "Thema's");
-  await themes.panel.locator("ss-themes-tab").locator('[data-preset="sand"]').click();
+  await preset(themes.panel.locator("ss-themes-tab"), "sand");
   await themes.tab.waitForTimeout(100);
   check(await saveBarOnScreen(themes.tab, themes.panel), `${width}px: theme Save bar on screen`);
   await ctx.close();
@@ -162,9 +173,14 @@ for (const width of [430, 1920]) {
   const { ctx, tab, panel, errors } = await open(1920, "", "Thema's");
   const themesTab = panel.locator("ss-themes-tab");
   let state = await tab.evaluate(probe);
-  check(state.panelText.includes("Begin met"), "no themes yet: preset picker shown");
+  check(
+    (await themesTab.getByRole("textbox", { name: "Naam", exact: true }).inputValue()) === "Licht Warm (kopie)",
+    "first time: starts from the theme in use"
+  );
+  check(!state.panelText.includes("Niet opgeslagen"), "that start doesn't count as a change");
+  check(state.panelText.includes("kleuren komen vast uit het gekopieerde thema"), "fixed colors explained");
 
-  await themesTab.locator('[data-preset="pink"]').click();
+  await preset(themesTab, "pink");
   await themesTab.getByRole("textbox", { name: "Naam", exact: true }).fill("Joyce");
   await themesTab.locator("summary", { hasText: "Bovenbalk" }).click();
   const headerField = themesTab
@@ -283,10 +299,58 @@ for (const width of [430, 1920]) {
   await ctx.close();
 }
 
+// Climate: options, preview, and putting the pop-up on a dashboard.
+{
+  const { ctx, tab, panel, errors } = await open(1920, "", "Klimaat");
+  const climate = panel.locator("ss-climate-tab");
+  const preview = climate.locator("ss-card-preview");
+  await climate.getByRole("button", { name: "LG Woonkamer" }).click();
+  check((await climate.getByRole("textbox", { name: "Naam" }).inputValue()) === "Airco woonkamer", "name from the room");
+  check((await climate.getByRole("textbox", { name: /Adres/ }).inputValue()) === "#airco-woonkamer", "address from the room");
+  check((await preview.locator(".button.active").allInnerTexts()).some((t) => t.includes("Koel")), "current mode is active in preview");
+  check((await preview.locator(".button.active").allInnerTexts()).some((t) => t.includes("Links/rechts")), "horizontal swing on");
+  check((await preview.getByText("21°", { exact: true }).count()) === 1, "target temperature shown");
+  check((await preview.getByText("Droog", { exact: true }).count()) === 1, "dry mode in preview before unchecking");
+
+  await climate.getByRole("checkbox", { name: "Droog" }).uncheck();
+  check((await preview.getByText("Droog", { exact: true }).count()) === 0, "unchecked mode leaves the preview");
+
+  await climate.getByRole("button", { name: "Op dashboard zetten" }).click();
+  await climate.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(300);
+  let lovelace = await tab.evaluate(() => window.__lovelace());
+  const cards = lovelace.dashboards.__main.views[0].sections.flatMap((section) => section.cards);
+  const popup = cards.find((c) => c.type === "vertical-stack" && c.cards[0].hash === "#airco-woonkamer");
+  check(Boolean(popup), "pop-up on the dashboard");
+  check(cards.some((c) => c.card_type === "button" && c.tap_action?.navigation_path === "#airco-woonkamer"), "opener button on the dashboard");
+  check(lovelace.backups.length === 1 && lovelace.backups[0].data.config.views[0].sections.length === 1, "backup of the old dashboard");
+  check(!JSON.stringify(popup).includes('"dry"'), "dry mode left out");
+
+  // Again: replaced, not doubled.
+  await climate.getByRole("button", { name: "Op dashboard zetten" }).click();
+  await climate.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(300);
+  lovelace = await tab.evaluate(() => window.__lovelace());
+  const again = lovelace.dashboards.__main.views[0].sections.flatMap((section) => section.cards);
+  check(again.filter((c) => c.type === "vertical-stack").length === 1, "second time replaces the pop-up");
+
+  // The other air conditioner has no fan modes or swing.
+  await climate.getByRole("button", { name: "Slaapkamer" }).click();
+  check((await climate.getByText(/geen ventilatorstanden/).count()) === 1, "missing fan explained");
+
+  // A panel-mode view can't take extra cards.
+  await climate.getByRole("combobox", { name: "Dashboard" }).selectOption({ label: "Plattegrond" });
+  await tab.waitForTimeout(200);
+  check(await climate.getByRole("button", { name: "Op dashboard zetten" }).isDisabled(), "panel view refused");
+  check(errors.length === 0, `climate: no errors ${errors.join(" | ")}`);
+  if (shots) await tab.screenshot({ path: `${shots}/climate.png` });
+  await ctx.close();
+}
+
 // Themes at phone width.
 {
   const { ctx, tab, panel, errors } = await open(430, "", "Thema's");
-  await panel.locator("ss-themes-tab").locator('[data-preset="sand"]').click();
+  await preset(panel.locator("ss-themes-tab"), "sand");
   await tab.waitForTimeout(200);
   check(errors.length === 0, `themes on a phone: no errors ${errors.join(" | ")}`);
   if (shots) await tab.screenshot({ path: `${shots}/themes-430.png` });

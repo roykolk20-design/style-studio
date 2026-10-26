@@ -150,3 +150,21 @@ def test_options_round_trip() -> None:
 
 def test_bad_options_fall_back_to_defaults() -> None:
     assert to_sidebar({"radius": 500}) == SIDEBAR_DEFAULTS
+
+
+def test_keeps_glass_category_icons() -> None:
+    """Glass Sidebar 1.5 stores an icon and "collapsed" per category."""
+    options = {
+        "categories": [
+            {"name": "Huis", "panels": ["map"], "icon": "mdi:home", "collapsed": True},
+            {"name": "Beheer", "panels": []},
+        ]
+    }
+    sidebar = to_sidebar(options)
+    assert sidebar["categories"][0] == {
+        "name": "Huis",
+        "panels": ["map"],
+        "icon": "mdi:home",
+        "collapsed": True,
+    }
+    assert to_options(sidebar, options)["categories"] == sidebar["categories"]

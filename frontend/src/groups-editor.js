@@ -39,7 +39,8 @@ export class GroupsEditor extends LitElement {
   }
 
   _clone() {
-    return this.categories.map((c) => ({ name: c.name, panels: [...c.panels] }));
+    // Keep what other tools store per group, such as Glass Sidebar's icon.
+    return this.categories.map((c) => ({ ...c, panels: [...c.panels] }));
   }
 
   // Puts a panel in a group (or none) before `before`, or at the end.

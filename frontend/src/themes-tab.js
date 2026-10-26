@@ -12,6 +12,15 @@ import {
 } from "./theme-catalog.js";
 
 const clone = (value) => (value == null ? value : JSON.parse(JSON.stringify(value)));
+
+// "#abc", "#aabbcc" or "rgb(1, 2, 3)" as "#aabbcc"; anything else is null.
+function toHex(value) {
+  const text = String(value).trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(text)) return text;
+  if (/^#[0-9a-f]{3}$/.test(text)) return `#${[...text.slice(1)].map((c) => c + c).join("")}`;
+  const rgb = text.match(/^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/);
+  return rgb ? `#${rgb.slice(1, 4).map((n) => Number(n).toString(16).padStart(2, "0")).join("")}` : null;
+}
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const HEX = /^#[0-9a-f]{6}$/i;
 const NEW = "new";
@@ -67,7 +76,8 @@ class ThemesTab extends TabBase {
 
   get dirty() {
     if (!this._draft) return false;
-    if (this._selected === NEW) return true;
+    // The theme you use now, opened untouched, isn't a change yet.
+    if (this._selected === NEW) return !this._pristine || !same(this._editable(this._draft), this._pristine);
     const saved = this._saved;
     return !saved || !same(this._editable(this._draft), this._editable(saved));
   }
@@ -80,6 +90,8 @@ class ThemesTab extends TabBase {
     try {
       this._state = await this.hass.callWS({ type: "style_studio/themes/get" });
       this._select(select ?? this._selected ?? this._state.themes[0]?.id ?? null);
+      // The first time, start from what you use now instead of something new.
+      if (!this._state.themes.length && this._selected === null) this._startFromCurrent();
     } catch (err) {
       this._error(err);
     }
@@ -125,6 +137,35 @@ class ThemesTab extends TabBase {
     this._selected = NEW;
     this._picking = false;
     this._draft = { name: this._uniqueName(name), base: clone(base), overrides: clone(overrides) };
+    this._pristine = null;
+  }
+
+  // The theme this screen uses now: its name and a start for a new theme.
+  _current() {
+    const name = this.hass.selectedTheme?.theme;
+    if (name && name !== "default" && this._state.others[name]) {
+      return { name, ...fromExisting(this._state.others[name]) };
+    }
+    // HA's own theme, or one we can't read: take the colors on screen, as
+    // base colors only, so the quick settings keep working.
+    const style = getComputedStyle(document.documentElement);
+    const onScreen = {};
+    for (const key of KNOWN_VARS) {
+      const hex = toHex(style.getPropertyValue(`--${key}`));
+      if (hex) onScreen[key] = hex;
+    }
+    return { name: this.t("my_theme"), base: fromExisting(onScreen).base, overrides: {} };
+  }
+
+  _startFromCurrent() {
+    const ours = this._state.themes.find((t) => t.name === this.hass.selectedTheme?.theme);
+    if (ours) {
+      this._select(ours.id);
+      return;
+    }
+    const { name, base, overrides } = this._current();
+    this._startNew(name === this.t("my_theme") ? name : `${name} (${this.t("copy_suffix")})`, base, overrides);
+    this._pristine = clone(this._draft);
   }
 
   _set(key, value) {
@@ -207,6 +248,7 @@ class ThemesTab extends TabBase {
         left: this._barButtons(),
         onCancel: () => this._cancel(),
         onSave: () => this._save(),
+        canSave: this._selected === NEW || this.dirty,
       })}
     `;
   }
@@ -282,9 +324,18 @@ class ThemesTab extends TabBase {
 
   _picker() {
     const others = Object.keys(this._state.others);
+    const current = this._current();
     return html`
       <div class="card">
         <h2>${this.t("start_from")}</h2>
+        <button class="current" @click=${() => this._startFromCurrent()}>
+          <ha-icon icon="mdi:palette-swatch"></ha-icon>
+          <span>
+            <b>${this.t("start_current")}</b>
+            <small>${current.name}</small>
+          </span>
+        </button>
+        <p class="hint">${this.t("or_preset")}</p>
         <div class="presets">
           ${Object.entries(PRESETS).map(([key, preset]) => {
             const vars = derive(preset.base);
@@ -351,6 +402,7 @@ class ThemesTab extends TabBase {
           <div class="card">
             <h2>${this.t("quick")}</h2>
             <p class="hint">${this.t("quick_hint")}</p>
+            ${this._fixedNotice()}
             ${this._color(b, "background", this.t("c_background"))}
             ${this._color(b, "card", this.t("c_card"))}
             ${this._color(b, "text", this.t("c_text"))}
@@ -481,6 +533,27 @@ class ThemesTab extends TabBase {
         </aside>
       </div>
     `;
+  }
+
+  // Colors copied from another theme stay as they were; say so, and offer to
+  // let them follow the quick settings instead.
+  _fixedNotice() {
+    const fixed = Object.keys(this._draft.overrides).filter((key) => KNOWN_VARS.has(key));
+    if (!fixed.length) return nothing;
+    return html`<div class="fixed">
+      <span>${this.t("fixed_colors", { count: fixed.length })}</span>
+      <button
+        class="small"
+        @click=${() => {
+          const overrides = Object.fromEntries(
+            Object.entries(this._draft.overrides).filter(([key]) => !KNOWN_VARS.has(key))
+          );
+          this._draft = { ...this._draft, overrides };
+        }}
+      >
+        ${this.t("follow_quick")}
+      </button>
+    </div>`;
   }
 
   _varRow(key, label, kind, derived, own = this._draft.overrides[key], removable = false) {
@@ -731,6 +804,40 @@ class ThemesTab extends TabBase {
         border-radius: 999px;
         color: var(--primary-color);
         font-weight: 500;
+      }
+
+      .current {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        padding: 12px;
+        margin-bottom: 12px;
+        border-radius: 12px;
+        border: 1px solid var(--primary-color);
+        background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background-color));
+        text-align: start;
+      }
+
+      .current small {
+        margin: 0;
+      }
+
+      .fixed {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        border-radius: 10px;
+        background: var(--secondary-background-color);
+        font-size: 13px;
+      }
+
+      .fixed span {
+        flex: 1;
+        min-width: 200px;
       }
 
       .leaving {

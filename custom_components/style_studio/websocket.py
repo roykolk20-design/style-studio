@@ -6,11 +6,12 @@ import uuid
 import voluptuous as vol
 
 from homeassistant.components import websocket_api
+from homeassistant.components.frontend import DATA_PANELS
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.loader import IntegrationNotFound, async_get_integration
 
-from . import people
+from . import backups, people
 from .const import DOMAIN, VERSION
 from .glass import GLASS_DOMAIN, GLASS_MIN_VERSION, glass_entry, normalize, to_options, to_sidebar
 from .store import StyleStore
@@ -41,6 +42,7 @@ def async_register(hass: HomeAssistant) -> None:
     ):
         websocket_api.async_register_command(hass, command)
     people.async_register(hass)
+    backups.async_register(hass)
 
 
 def _store(hass: HomeAssistant) -> StyleStore:
@@ -72,6 +74,8 @@ async def ws_get(
                 "min_version": GLASS_MIN_VERSION,
                 "added": entry is not None,
                 "loaded": entry is not None and entry.state is ConfigEntryState.LOADED,
+                # Glass Sidebar 1.5+ has its own settings page here.
+                "settings_page": "/glass-sidebar" if "glass-sidebar" in hass.data.get(DATA_PANELS, {}) else None,
                 "sidebar": to_sidebar(dict(entry.options)) if entry else None,
                 "history": _store(hass).history_size(GLASS_DOMAIN),
             },

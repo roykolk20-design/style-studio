@@ -3,7 +3,7 @@
 # Style Studio for Home Assistant
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
-![Version](https://img.shields.io/badge/version-0.2.0-F59E0B)
+![Version](https://img.shields.io/badge/version-0.3.0-F59E0B)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.10%2B-18BCF2)
 
 Set the look of your whole Home Assistant from one panel: menu, top bar, cards,
@@ -46,6 +46,11 @@ each lives in its own repository and installs on its own.
   person to the next. It is applied when that person opens Home Assistant,
   once on each device, so they can still pick something else in their
   profile. The panel shows what each person uses now and when it was applied.
+- **Climate**: a pop-up per air conditioner with a big minus and plus for the
+  temperature, buttons for the modes and fan speeds, and swing switches. Only
+  what your air conditioner reports is offered; what's missing is explained.
+  Preview first, then Style Studio puts it on a dashboard, with an opener
+  button, after a backup of that dashboard.
 - **Sidebar** settings for the Glass Sidebar add-on: floating, corners, blur,
   highlight, phone menu and groups with headings, with a preview at phone,
   tablet and desktop width.
@@ -64,9 +69,9 @@ each lives in its own repository and installs on its own.
 | --- | --- |
 | ![Per person](images/people.png) | ![Sidebar settings](images/sidebar.png) |
 
-| Phone |
-| --- |
-| ![Phone](images/mobile.png) |
+| Climate | Phone |
+| --- | --- |
+| ![Climate pop-up](images/climate.png) | ![Phone](images/mobile.png) |
 
 ## Installation
 
@@ -149,10 +154,30 @@ This needs a small script in every browser, which Style Studio adds by
 itself. It also tells the panel which version each device runs, so you can
 see when the companion app still uses old files.
 
+### Climate
+
+The **Klimaat** tab lists every `climate` entity. For each one, pick the name
+and address (for example `#airco-woonkamer`), which modes to show, and whether
+to include temperature, fan and swing. Parts your air conditioner doesn't
+report are greyed out with the reason; louver positions, for example, aren't
+passed on by the LG ThinQ integration.
+
+Then pick a dashboard and view and choose **Op dashboard zetten**. Style Studio
+first saves a backup of that dashboard to
+`config/style_studio/backups/dashboards/`, then adds the pop-up and an opener
+button. Doing it again replaces the earlier pop-up instead of adding a second
+one. Dashboards in YAML mode can't be changed; copy the card code instead.
+
+The pop-up needs [button-card](https://github.com/custom-cards/button-card)
+and [Bubble Card](https://github.com/Clooos/Bubble-Card) from HACS. The active
+button uses `--state-climate-active-color`, so it follows each person's theme.
+
 ### Sidebar
 
 With the Glass Sidebar add-on installed, the **Zijbalk** tab sets its shape,
-glass, highlight, phone menu and groups. Changes apply to everyone after
+glass, highlight, phone menu and groups. Glass Sidebar 1.5 and newer has its
+own, fuller settings page (styles, tint, icons per group, quick menu); the tab
+links to it, and keeps what you set there. Changes apply to everyone after
 **Opslaan**. Without the add-on, the tab explains how to add it; the sidebar
 colors are part of your theme either way.
 
@@ -161,7 +186,6 @@ colors are part of your theme either way.
 The panel already shows tabs for these; they arrive in later versions:
 
 - **Rooms and pop-ups**: room tiles and Bubble Card pop-ups from a few choices.
-- **Climate**: a pop-up per air conditioner with modes, fan and swing.
 - **Check and restore**: find conflicts such as card-mod sidebar styles, and
   restore backups.
 

@@ -1,4 +1,4 @@
-import { html, nothing } from "lit";
+import { css, html, nothing } from "lit";
 import "./groups-editor.js";
 import "./sidebar-preview.js";
 import { TabBase } from "./tab-base.js";
@@ -139,6 +139,12 @@ class SidebarTab extends TabBase {
     const s = this._draft;
     return html`
       <p class="intro">${this.t("glass_intro")}</p>
+      ${glass.settings_page
+        ? html`<a class="settings-link" href=${glass.settings_page}>
+            <ha-icon icon="mdi:open-in-app"></ha-icon>${this.t("open_glass")}
+            <small>${this.t("open_glass_hint")}</small>
+          </a>`
+        : nothing}
       ${glass.version && olderThan(glass.version, glass.min_version)
         ? this._warning(this.t("glass_old", { version: glass.version, min: glass.min_version }))
         : nothing}
@@ -263,6 +269,31 @@ class SidebarTab extends TabBase {
     `;
   }
 }
+
+SidebarTab.styles = [
+  TabBase.styles,
+  css`
+    .settings-link {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      border-radius: var(--ss-radius, 12px);
+      border: 1px solid var(--primary-color);
+      color: var(--primary-color);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .settings-link small {
+      flex-basis: 100%;
+      margin: 0;
+      font-weight: 400;
+    }
+  `,
+];
 
 if (!customElements.get("ss-sidebar-tab")) {
   customElements.define("ss-sidebar-tab", SidebarTab);
