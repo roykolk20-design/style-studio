@@ -69,6 +69,7 @@ async function open(width, query = "", tabName = "Zijbalk") {
     "Per persoon": "ss-people-tab .intro",
     Klimaat: "ss-climate-tab .intro",
     "Kamers en pop-ups": "ss-rooms-tab .intro",
+    "Controle en herstel": "ss-check-tab .intro",
   };
   await panel.locator(ready[tabName] ?? "ss-sidebar-tab .card").first().waitFor();
   await tab.waitForTimeout(300);
@@ -392,6 +393,44 @@ for (const width of [430, 1920]) {
   check(lovelace.dashboards.__main.views.length === 3 && lovelace.backups.length === backups + 1, "replaced with a new backup");
   check(errors.length === 0, `rooms: no errors ${errors.join(" | ")}`);
   if (shots) await tab.screenshot({ path: `${shots}/rooms.png` });
+  await ctx.close();
+}
+
+// Check and restore: conflicts, fixed styles in dashboards, backups.
+{
+  const { ctx, tab, panel, errors } = await open(1920, "", "Controle en herstel");
+  const checkTab = panel.locator("ss-check-tab");
+  check((await checkTab.getByText(/card-mod de zijbalk/).count()) === 1, "card-mod sidebar theme flagged");
+  check((await checkTab.getByText(/Joyce · Companion-app · 0.1.0/).count()) === 1, "old app version flagged per device");
+
+  // Browser Mod's leftover setting in this browser.
+  await tab.evaluate(() => localStorage.setItem("isDefaultPanelManaged", "true"));
+  await checkTab.getByRole("button", { name: "Opnieuw controleren" }).click();
+  await checkTab.getByRole("button", { name: "Oplossen" }).click();
+  await checkTab.getByRole("button", { name: "Ja" }).click();
+  check((await tab.evaluate(() => localStorage.getItem("isDefaultPanelManaged"))) === null, "Browser Mod conflict fixed");
+
+  await checkTab.getByRole("button", { name: "Dashboards doorzoeken" }).click();
+  await tab.waitForTimeout(300);
+  check((await checkTab.getByText("var(--primary-color, #D99A1E)").count()) === 1, "fixed color mapped to the theme color");
+  check((await checkTab.getByText("var(--ha-card-border-radius, 24px)").count()) === 1, "fixed corner mapped to the card radius");
+  check((await checkTab.getByText("geen themakleur met deze waarde").count()) === 1, "unknown color left alone");
+  await checkTab.getByRole("button", { name: "Gekozen voorstellen toepassen" }).first().click();
+  await checkTab.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(500);
+  let lovelace = await tab.evaluate(() => window.__lovelace());
+  const energy = JSON.stringify(lovelace.dashboards.__main.views[1]);
+  check(energy.includes("var(--primary-color, #D99A1E)") && energy.includes("var(--ha-card-border-radius, 24px)"), "suggestions applied");
+  check(energy.includes("#123456"), "color without suggestion kept");
+  check(lovelace.backups.length === 1, "backup before applying");
+
+  await checkTab.locator("details", { hasText: "Dashboards" }).getByRole("button", { name: "Terugzetten" }).first().click();
+  await checkTab.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(500);
+  lovelace = await tab.evaluate(() => window.__lovelace());
+  check(!JSON.stringify(lovelace.dashboards.__main).includes("var(--primary-color"), "dashboard backup restored");
+  check(errors.length === 0, `check: no errors ${errors.join(" | ")}`);
+  if (shots) await tab.screenshot({ path: `${shots}/check.png` });
   await ctx.close();
 }
 

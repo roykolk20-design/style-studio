@@ -1,0 +1,155 @@
+"""Check and restore: known conflicts, and every kept version to go back to."""
+
+from typing import Any
+
+import voluptuous as vol
+
+from homeassistant.components import websocket_api
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.loader import IntegrationNotFound, async_get_integration
+
+from .const import DOMAIN, VERSION
+from .glass import GLASS_DOMAIN, glass_entry
+from .people import PEOPLE, SIGNAL_PERSONS
+from .store import StyleStore
+from .themes import ForeignFileError, async_write_themes, loaded_themes
+
+THEMES = "themes"
+KEYS = (THEMES, GLASS_DOMAIN, PEOPLE)
+# card-mod keys in a theme that style the sidebar or the whole app; they
+# fight with Glass Sidebar over the same elements.
+SIDEBAR_CARD_MOD = ("card-mod-sidebar", "card-mod-root", "card-mod-root-yaml")
+
+
+def _store(hass: HomeAssistant) -> StyleStore:
+    return hass.data[DOMAIN]["store"]
+
+
+@callback
+def async_register(hass: HomeAssistant) -> None:
+    for command in (ws_check, ws_history_list, ws_history_restore):
+        websocket_api.async_register_command(hass, command)
+
+
+def _card_mod_keys(theme: Any) -> list[str]:
+    if not isinstance(theme, dict):
+        return []
+    keys = [key for key in theme if str(key).startswith("card-mod")]
+    for mode in (theme.get("modes") or {}).values():
+        if isinstance(mode, dict):
+            keys += [key for key in mode if str(key).startswith("card-mod")]
+    return sorted(set(keys))
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/check"})
+@websocket_api.async_response
+async def ws_check(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    store = _store(hass)
+    loaded = loaded_themes(hass)
+    try:
+        await async_get_integration(hass, GLASS_DOMAIN)
+        glass_installed = True
+    except IntegrationNotFound:
+        glass_installed = False
+
+    users = {user.id: user.name for user in await hass.auth.async_get_users()}
+    connection.send_result(
+        msg["id"],
+        {
+            "version": VERSION,
+            "glass_sidebar": glass_installed and glass_entry(hass) is not None,
+            "card_mod_themes": [
+                {
+                    "theme": name,
+                    "keys": keys,
+                    "sidebar": any(key in SIDEBAR_CARD_MOD for key in keys),
+                }
+                for name, theme in sorted(loaded.items())
+                if (keys := _card_mod_keys(theme))
+            ],
+            "themes_not_loaded": [
+                theme["name"] for theme in store.themes if theme["name"] not in loaded
+            ],
+            "devices": [
+                {**report, "user": users.get(report["user_id"], report["user_id"])}
+                for report in sorted(store.reports.values(), key=lambda r: r["at"], reverse=True)
+            ],
+        },
+    )
+
+
+def _summary(key: str, value: Any) -> str:
+    if value is None:
+        return "-"
+    if key == THEMES:
+        return ", ".join(theme["name"] for theme in value) or "-"
+    if key == GLASS_DOMAIN:
+        return ", ".join(f"{k}: {value[k]}" for k in ("floating", "radius", "blur") if k in value) or "-"
+    return f"{len(value)}"
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/history/list"})
+@websocket_api.async_response
+async def ws_history_list(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Every kept version per kind, newest first."""
+    store = _store(hass)
+    connection.send_result(
+        msg["id"],
+        {
+            key: [
+                {"index": index, "saved_at": entry["saved_at"], "summary": _summary(key, entry["value"])}
+                for index, entry in reversed(list(enumerate(store.history(key))))
+            ]
+            for key in KEYS
+        },
+    )
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/history/restore",
+        vol.Required("key"): vol.In(KEYS),
+        vol.Required("index"): vol.Coerce(int),
+    }
+)
+@websocket_api.async_response
+async def ws_history_restore(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Put back any kept version. What is there now is kept first."""
+    store = _store(hass)
+    key = msg["key"]
+    history = store.history(key)
+    if not 0 <= msg["index"] < len(history):
+        connection.send_error(msg["id"], "not_found", "No such version")
+        return
+    value = history[msg["index"]]["value"]
+
+    if key == THEMES:
+        try:
+            await async_write_themes(hass, value)
+        except (ForeignFileError, OSError) as err:
+            connection.send_error(msg["id"], "write_failed", str(err))
+            return
+        await store.async_push_history(THEMES, store.themes)
+        await store.async_set_themes(value)
+    elif key == GLASS_DOMAIN:
+        entry = glass_entry(hass)
+        if entry is None:
+            connection.send_error(msg["id"], "not_found", "Glass Sidebar is not set up")
+            return
+        await store.async_push_history(GLASS_DOMAIN, dict(entry.options))
+        hass.config_entries.async_update_entry(entry, options=value)
+    else:
+        await store.async_push_history(PEOPLE, store.persons)
+        await store.async_set_persons(value)
+        async_dispatcher_send(hass, SIGNAL_PERSONS)
+    connection.send_result(msg["id"], {"restored": True})

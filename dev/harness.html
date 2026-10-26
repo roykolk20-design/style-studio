@@ -124,7 +124,7 @@
   const reports = {
     joyce: {
       device: "joyce00001", user_id: "3a122b8e", at: new Date(Date.now() - 3600e3).toISOString(),
-      version: VERSION, app: true, theme: "Licht Roze",
+      version: "0.1.0", app: true, theme: "Licht Roze",
       sidebar: { panelOrder: ["lovelace", "map"], hiddenPanels: ["logbook", "history"] },
     },
   };
@@ -193,7 +193,12 @@
       views: [
         { title: "Licht", path: "licht", type: "sections", max_columns: 4,
           sections: [{ type: "grid", cards: [{ type: "heading", heading: "Thuis" }] }] },
-        { title: "Energie", path: "energie", cards: [] },
+        // Hand-made cards with fixed colors and corners, like the real ones.
+        { title: "Energie", path: "energie", cards: [
+          { type: "custom:button-card", name: "Batterij",
+            styles: { card: [{ "border-radius": "24px" }, { "background-color": "#D99A1E" }] } },
+          { type: "markdown", content: "<span style='color: #123456'>Stroom</span>" },
+        ] },
       ],
     },
     "dashboard-plattegrond": { views: [{ title: "Plattegrond", type: "panel", cards: [{ type: "picture-elements" }] }] },
@@ -237,6 +242,29 @@
           return { backups: backups.map(({ data, ...rest }) => rest).reverse() };
         case "style_studio/backups/read":
           return { data: backups.find((b) => b.file === msg.file).data };
+        case "style_studio/check":
+          return {
+            version: VERSION,
+            glass_sidebar: true,
+            card_mod_themes: [{ theme: "Licht Warm", keys: ["card-mod-sidebar", "card-mod-theme"], sidebar: true }],
+            themes_not_loaded: [],
+            devices: Object.values(reports).map((r) => ({ ...r, user: users.find((u) => u.id === r.user_id)?.name })),
+          };
+        case "style_studio/history/list": {
+          const list = (items, summary) =>
+            items.map((value, index) => ({ index, saved_at: new Date().toISOString(), summary: summary(value) })).reverse();
+          return {
+            themes: list(themeHistory, (v) => v.map((t) => t.name).join(", ") || "-"),
+            glass_sidebar: list(db.history, (v) => `radius: ${v?.radius}`),
+            people: list(peopleHistory, (v) => `${Object.keys(v).length}`),
+          };
+        }
+        case "style_studio/history/restore": {
+          if (msg.key === "themes") { const v = themeHistory[msg.index]; themeHistory.push(structuredClone(themes)); themes = structuredClone(v); }
+          if (msg.key === "glass_sidebar") { const v = db.history[msg.index]; db.history.push(db.sidebar); db.sidebar = v; push(); }
+          if (msg.key === "people") { const v = peopleHistory[msg.index]; peopleHistory.push(structuredClone(persons)); persons = structuredClone(v); }
+          return { restored: true };
+        }
         case "style_studio/people/get":
           return peopleState();
         case "style_studio/people/save": {

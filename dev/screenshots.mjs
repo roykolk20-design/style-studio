@@ -116,6 +116,16 @@ async function open(width, height, tabName = "Thema's") {
   await page.close();
 }
 
+// Check and restore, after searching the dashboards.
+{
+  const { page, panel } = await open(1280, 800, "Controle en herstel");
+  const checkTab = panel.locator("ss-check-tab");
+  await checkTab.getByRole("button", { name: "Dashboards doorzoeken" }).click();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: out("check.png") });
+  await page.close();
+}
+
 // Phone.
 {
   const { page, themes } = await open(430, 860);

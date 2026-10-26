@@ -3,7 +3,7 @@
 # Style Studio for Home Assistant
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
-![Version](https://img.shields.io/badge/version-0.4.0-F59E0B)
+![Version](https://img.shields.io/badge/version-0.5.0-F59E0B)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.10%2B-18BCF2)
 
 Set the look of your whole Home Assistant from one panel: menu, top bar, cards,
@@ -56,6 +56,11 @@ each lives in its own repository and installs on its own.
   what your air conditioner reports is offered; what's missing is explained.
   Preview first, then Style Studio puts it on a dashboard, with an opener
   button, after a backup of that dashboard.
+- **Check and restore**: finds what gets in the way of the look (card-mod
+  sidebar styles, Browser Mod's leftover default-dashboard setting, themes
+  that aren't loaded, devices or the companion app on old files), finds colors
+  and corners written into dashboard cards and replaces them with theme
+  variables, and restores any kept version or dashboard backup.
 - **Sidebar** settings for the Glass Sidebar add-on: floating, corners, blur,
   highlight, phone menu and groups with headings, with a preview at phone,
   tablet and desktop width.
@@ -78,9 +83,9 @@ each lives in its own repository and installs on its own.
 | --- | --- |
 | ![Rooms per floor](images/rooms.png) | ![Climate pop-up](images/climate.png) |
 
-| Phone |
-| --- |
-| ![Phone](images/mobile.png) |
+| Check and restore | Phone |
+| --- | --- |
+| ![Check and restore](images/check.png) | ![Phone](images/mobile.png) |
 
 ## Installation
 
@@ -198,6 +203,30 @@ The pop-up needs [button-card](https://github.com/custom-cards/button-card)
 and [Bubble Card](https://github.com/Clooos/Bubble-Card) from HACS. The active
 button uses `--state-climate-active-color`, so it follows each person's theme.
 
+### Check and restore
+
+The **Controle en herstel** tab checks:
+
+- themes that style the sidebar with card-mod (`card-mod-sidebar`), which
+  clashes with Glass Sidebar;
+- Browser Mod's `default_dashboard_plugin_conflict` in this browser, with a
+  button to clear the leftover setting;
+- Style Studio themes that Home Assistant doesn't load;
+- devices and companion apps that still run old files, per person.
+
+**Fixed colors and corners.** Colors and corners written into a card (common
+in button-card, Bubble Card and card-mod styles) don't follow any theme, so a
+theme seems to do nothing on those dashboards. *Dashboards doorzoeken*
+lists them per dashboard. A color that matches a color of the theme you use
+now gets that theme variable as suggestion, for example
+`var(--primary-color, #F59E0B)`; corners get
+`var(--ha-card-border-radius, 24px)`. The old value stays as a fallback.
+Choose per value what to replace; every dashboard is backed up first.
+
+**Backups and history.** Every dashboard backup and every kept version of
+themes, Glass Sidebar settings and per-person settings is listed, and any of
+them can be restored. What is there now is kept first.
+
 ### Sidebar
 
 With the Glass Sidebar add-on installed, the **Zijbalk** tab sets its shape,
@@ -206,13 +235,6 @@ own, fuller settings page (styles, tint, icons per group, quick menu); the tab
 links to it, and keeps what you set there. Changes apply to everyone after
 **Opslaan**. Without the add-on, the tab explains how to add it; the sidebar
 colors are part of your theme either way.
-
-## Coming next
-
-The panel already shows tabs for these; they arrive in later versions:
-
-- **Check and restore**: find conflicts such as card-mod sidebar styles, and
-  restore backups.
 
 ## Troubleshooting
 

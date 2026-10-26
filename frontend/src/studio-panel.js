@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
+import "./check-tab.js";
 import "./climate-tab.js";
 import "./people-tab.js";
 import "./rooms-tab.js";
@@ -119,6 +120,8 @@ class StudioPanel extends LitElement {
     switch (this._tab) {
       case "themes":
         return html`<ss-themes-tab .hass=${this.hass} .narrow=${this.narrow}></ss-themes-tab>`;
+      case "check":
+        return html`<ss-check-tab .hass=${this.hass} .narrow=${this.narrow}></ss-check-tab>`;
       case "rooms":
         return html`<ss-rooms-tab .hass=${this.hass} .narrow=${this.narrow}></ss-rooms-tab>`;
       case "climate":

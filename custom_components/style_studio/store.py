@@ -58,6 +58,10 @@ class StyleStore:
         # Browsers report on every page load; no need to write each one at once.
         self._store.async_delay_save(lambda: self._data, 30)
 
+    def history(self, key: str) -> list[dict[str, Any]]:
+        """Kept versions, oldest first: [{"saved_at", "value"}]."""
+        return list(self._data["history"].get(key, []))
+
     def history_size(self, key: str) -> int:
         return len(self._data["history"].get(key, []))
 

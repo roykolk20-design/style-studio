@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0]
+
+All seven parts of the plan are in.
+
+### New
+
+- **Check and restore** tab: card-mod sidebar styles in themes, Browser Mod's
+  default_dashboard_plugin_conflict (with a fix for this browser), themes that
+  aren't loaded, and devices or companion apps on old files.
+- Finds fixed colors and corners in dashboard cards and replaces the ones you
+  pick with theme variables (keeping the old value as fallback), after a
+  backup.
+- Restore any kept version of themes, Glass Sidebar and per-person settings,
+  and any dashboard backup.
+
 ## [0.4.0]
 
 ### New
