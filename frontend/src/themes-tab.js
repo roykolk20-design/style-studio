@@ -415,6 +415,29 @@ class ThemesTab extends TabBase {
             ${this._color(b, "accent", this.t("c_accent"))}
             ${this._color(b, "sidebar", this.t("c_sidebar"))}
             <label class="row">
+              <span>
+                ${this.t("c_icons")}
+                <small>${this.t("c_icons_hint")}</small>
+              </span>
+              <span class="inline">
+                ${b.icon
+                  ? html`<input
+                      type="color"
+                      aria-label=${this.t("c_icons")}
+                      .value=${b.icon}
+                      @input=${(ev) => this._set("icon", ev.target.value)}
+                    />`
+                  : nothing}
+                <input
+                  type="checkbox"
+                  class="switch"
+                  aria-label=${this.t("c_icons_own")}
+                  .checked=${Boolean(b.icon)}
+                  @change=${(ev) => this._set("icon", ev.target.checked ? derived["state-icon-color"] : null)}
+                />
+              </span>
+            </label>
+            <label class="row">
               <span>${this.t("header_same")}</span>
               <span class="inline">
                 ${b.header

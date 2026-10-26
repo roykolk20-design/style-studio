@@ -2,6 +2,8 @@
 // buttons, the design that worked by hand (see the brief, 2.5). Colors are
 // theme variables, so the active button follows each person's theme.
 
+import { popupCard, popupHeadOf } from "./popup-format.js";
+
 export const MODE_ICONS = {
   off: "mdi:power",
   cool: "mdi:snowflake",
@@ -229,7 +231,8 @@ export function climateCards(options, stateObj, labels) {
     cards.push({ type: "grid", title: labels.swing, columns: swings.length, square: false, cards: swings });
   }
 
-  const popup = { type: "vertical-stack", cards };
+  const [head, ...content] = cards;
+  const popup = popupCard(head, content);
   const opener = options.opener
     ? {
         type: "custom:bubble-card",
@@ -249,11 +252,7 @@ export function climateCards(options, stateObj, labels) {
 }
 
 /** Finds cards made for this pop-up earlier, so they get replaced. */
-export const isPopup = (hash) => (card) =>
-  card?.type === "vertical-stack" &&
-  card.cards?.[0]?.type === "custom:bubble-card" &&
-  card.cards[0].card_type === "pop-up" &&
-  card.cards[0].hash === hash;
+export const isPopup = (hash) => (card) => popupHeadOf(card)?.hash === hash;
 
 export const isOpener = (hash) => (card) =>
   card?.type === "custom:bubble-card" &&

@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.6.0]
+
+### New
+
+- **Rooms on your own dashboards.** The rooms tab now finds the room tiles and
+  pop-ups already on a dashboard, also hand-made button-cards with
+  `const NAME/ICON/LIGHTS` templates, and changes name, icon, lights and the
+  air conditioning button in place; their own design stays.
+- **Add rooms** from your areas or by hand, into the view and section you
+  pick, with the design of a room that's already there.
+- **Other cards**: greeting, scenes, house status and weather.
+- **Icon colors** in the theme editor: icons follow a calm tone of the accent
+  (or a color of your own) instead of Home Assistant's default blue, also in
+  button-card and older cards; on-colors for helpers, automations, scripts,
+  sensors, media players and people.
+- Check and restore maps Home Assistant's default colors written into cards,
+  such as the blue `#44739e`, to theme variables.
+- New pop-ups in Bubble Card 3.2's standalone format, with a choice for the
+  old one.
+
+### Fixed
+
+- The main dashboard was listed twice on newer Home Assistant versions.
+- Checkboxes in re-sorted lists could show the wrong state.
+- Devices not seen for two weeks no longer count as running old files.
+
 ## [0.5.1]
 
 ### Fixed

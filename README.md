@@ -3,7 +3,7 @@
 # Style Studio for Home Assistant
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
-![Version](https://img.shields.io/badge/version-0.5.1-F59E0B)
+![Version](https://img.shields.io/badge/version-0.6.0-F59E0B)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.10%2B-18BCF2)
 
 Set the look of your whole Home Assistant from one panel: menu, top bar, cards,
@@ -46,11 +46,13 @@ each lives in its own repository and installs on its own.
   person to the next. It is applied when that person opens Home Assistant,
   once on each device, so they can still pick something else in their
   profile. The panel shows what each person uses now and when it was applied.
-- **Rooms and pop-ups**: room tiles per floor, each opening a pop-up with
-  its lights and an air conditioning button. Rooms, floors and lights come
-  from your areas in Home Assistant; pick names, icons, lights and order, and
-  solid or glass pop-ups. Style Studio makes one view of it, with a column per
-  floor on a wide screen; your other views stay as they are.
+- **Rooms and pop-ups on your own dashboards**: Style Studio finds the room
+  tiles and pop-ups already there, also hand-made ones with button-card
+  templates, and changes their name, icon, lights and air conditioning in
+  place while their own design stays. New rooms (from your areas, or made by
+  hand) go into the section you pick and copy the design of a room that's
+  already there. Also a greeting, scenes, house status and weather card, or a
+  whole view of rooms per floor at once.
 - **Climate**: a pop-up per air conditioner with a big minus and plus for the
   temperature, buttons for the modes and fan speeds, and swing switches. Only
   what your air conditioner reports is offered; what's missing is explained.
@@ -177,20 +179,31 @@ see when the companion app still uses old files.
 
 ### Rooms and pop-ups
 
-The **Kamers en pop-ups** tab shows your floors with their areas. Each room
-gets a tile that shows how many lights are on, and a pop-up (`#l-<room>`)
-with a tile per light. When the room has an air conditioner, the pop-up gets a
-button to its climate pop-up (`#airco-<room>`, see below).
+Pick a dashboard in the **Kamers en pop-ups** tab. Style Studio lists the
+rooms on it: every Bubble Card pop-up (`#l-woonkamer`) with the tile that
+opens it. Hand-made ones count too, including button-card templates with
+`const NAME`, `const ICON` and `const LIGHTS`.
 
-Per room you can leave it out, rename it, change its icon, pick other lights
-and move it up or down. Pop-ups can be solid or glass, with their width on a
-desktop, the space above them on a phone, and the header buttons. Tap a tile
-in the preview to see its pop-up.
+- **Change a room**: name, icon, lights and the air conditioning button.
+  Only those values change in your own cards; styles and templates stay. New
+  light cards in the pop-up copy the look of the first one.
+- **Add a room**: from your areas (dashed buttons) or by hand with
+  *Kamer toevoegen*. Pick the view and section (a room from an area goes to
+  the section named after its floor) and the design: *like* a room that's
+  already there, or Style Studio's own.
+- **Other cards**: a greeting with the day, lights on, who's home and the
+  temperature; scenes; house status (low batteries, devices offline); weather.
+  These are Home Assistant's own cards.
+- **A whole view**: at the bottom, *Complete weergave maken* still makes one
+  view with a column per floor from your areas.
 
-**Weergave maken** adds one view (by default *Kamers*, address `kamers`) to
-the dashboard you pick, after a backup. Doing it again replaces that view;
-your other views are never touched. Rooms come from **Settings → Areas,
-labels & zones**, so assign your lights to areas and areas to floors first.
+The preview shows the real cards in Home Assistant. Every change makes a
+backup of the dashboard first.
+
+**Bubble Card 3.2** writes pop-ups in a new, "standalone" format (the content
+in `cards:` instead of a vertical-stack). New pop-ups use that format; choose
+*Oud* under *Pop-up-vorm* for an older Bubble Card. Rooms in either format
+are found and changed.
 
 ### Climate
 

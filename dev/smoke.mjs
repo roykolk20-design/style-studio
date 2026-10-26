@@ -4,6 +4,10 @@
 import { chromium } from "playwright-core";
 import { server } from "./serve.mjs";
 
+// A Bubble Card pop-up with this hash, in either format.
+const popupHash = (card) =>
+  card?.card_type === "pop-up" ? card.hash : card?.type === "vertical-stack" ? card.cards?.[0]?.hash : undefined;
+
 async function preset(themesTab, key) {
   if (!(await themesTab.locator(`[data-preset="${key}"]`).count())) {
     await themesTab.getByRole("button", { name: "Nieuw thema" }).click();
@@ -322,19 +326,29 @@ for (const width of [430, 1920]) {
   await tab.waitForTimeout(300);
   let lovelace = await tab.evaluate(() => window.__lovelace());
   const cards = lovelace.dashboards.__main.views[0].sections.flatMap((section) => section.cards);
-  const popup = cards.find((c) => c.type === "vertical-stack" && c.cards[0].hash === "#airco-woonkamer");
+  const popup = cards.find((c) => popupHash(c) === "#airco-woonkamer");
+  check(popup?.type === "custom:bubble-card" && Array.isArray(popup.cards), "new standalone pop-up format by default");
   check(Boolean(popup), "pop-up on the dashboard");
   check(cards.some((c) => c.card_type === "button" && c.tap_action?.navigation_path === "#airco-woonkamer"), "opener button on the dashboard");
-  check(lovelace.backups.length === 1 && lovelace.backups[0].data.config.views[0].sections.length === 1, "backup of the old dashboard");
+  check(
+    lovelace.backups.length === 1 && !JSON.stringify(lovelace.backups[0].data.config).includes("#airco-woonkamer"),
+    "backup of the old dashboard"
+  );
   check(!JSON.stringify(popup).includes('"dry"'), "dry mode left out");
 
-  // Again: replaced, not doubled.
+  // Again, now in the old format: replaced, not doubled.
+  await climate.getByRole("radio", { name: "Oud" }).click();
   await climate.getByRole("button", { name: "Op dashboard zetten" }).click();
   await climate.getByRole("button", { name: "Ja" }).click();
   await tab.waitForTimeout(300);
   lovelace = await tab.evaluate(() => window.__lovelace());
   const again = lovelace.dashboards.__main.views[0].sections.flatMap((section) => section.cards);
-  check(again.filter((c) => c.type === "vertical-stack").length === 1, "second time replaces the pop-up");
+  check(
+    again.filter((c) => popupHash(c) === "#airco-woonkamer").length === 1,
+    "second time replaces the pop-up"
+  );
+  check(again.some((c) => c.type === "vertical-stack" && popupHash(c) === "#airco-woonkamer"), "old format when chosen");
+  await climate.getByRole("radio", { name: "Nieuw (3.2+)" }).click();
 
   // The other air conditioner has no fan modes or swing.
   await climate.getByRole("button", { name: "Slaapkamer" }).click();
@@ -349,50 +363,91 @@ for (const width of [430, 1920]) {
   await ctx.close();
 }
 
-// Rooms: tiles per floor from areas, pop-ups with lights, a new view.
+// Rooms on your own dashboard: find a hand-made room and change it in place,
+// add a room from an area and one made by hand, add other cards.
 {
   const { ctx, tab, panel, errors } = await open(1920, "", "Kamers en pop-ups");
   const rooms = panel.locator("ss-rooms-tab");
-  const floorText = async (name) => (await rooms.locator(`.floor[data-floor="${name}"]`).allInnerTexts()).join(" ");
-  check((await rooms.locator(".floor").count()) === 3, "one card per floor");
-  check((await rooms.locator('.floor[data-floor="Begane grond"] input[aria-label="Naam"]').count()) === 2, "living room and kitchen on the ground floor");
-  check((await floorText("Begane grond")).includes("2 lampen"), "lights found per area");
-  check((await floorText("Begane grond")).includes("#airco-woonkamer"), "air conditioning button links to the climate pop-up");
-
-  const preview = rooms.locator("aside");
-  check((await preview.getByText("1 aan").count()) === 2, "tiles count lights that are on");
-  await rooms.locator(".pick", { hasText: "Woonkamer" }).click();
-  check((await preview.getByText("Plafondlamp").count()) === 1, "pop-up shows the room's lights");
-  check((await preview.getByText("Airco", { exact: true }).count()) === 1, "pop-up has the air conditioning button");
-
-  await rooms.getByRole("checkbox", { name: "Meenemen Zolder" }).uncheck();
+  await rooms.locator(".chip").first().waitFor();
+  const chips = (await rooms.locator(".chip").allInnerTexts()).map((c) => c.trim());
+  check(chips[0] === "Woonkamer", `hand-made room found on the dashboard (${chips.join(", ")})`);
+  check(chips.includes("Keuken") && chips.includes("Kamer toevoegen"), "areas not on the dashboard offered");
   check(
-    (await preview.locator(".floor-name").allTextContents()).join() === "Begane grond,1e verdieping",
-    "left-out room leaves the preview"
+    (await rooms.getByRole("checkbox", { name: "Plafondlamp" }).isChecked()) &&
+      (await rooms.getByRole("checkbox", { name: "Staande lamp" }).isChecked()),
+    "its lights read from the pop-up"
   );
 
-  await rooms.getByRole("button", { name: "Weergave maken" }).click();
+  // Change it: other name, one light less; its own design stays.
+  await rooms.getByRole("textbox", { name: "Naam" }).fill("Huiskamer");
+  await rooms.getByRole("checkbox", { name: "Staande lamp" }).uncheck();
+  await rooms.getByRole("button", { name: "Wijzigingen opslaan" }).click();
+  await rooms.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(400);
+  let lovelace = await tab.evaluate(() => window.__lovelace());
+  const ground = lovelace.dashboards.__main.views[0].sections[1].cards;
+  check(ground[1].name.includes(`const LIGHTS=["light.woonkamer_plafond"]`) && ground[1].name.includes(`const NAME='Huiskamer'`), "tile template changed in place");
+  check(JSON.stringify(ground[1].styles) === JSON.stringify({ card: [{ "border-radius": "24px" }, { padding: "16px" }] }), "tile design kept");
+  check(ground[2].cards[0].name === "Huiskamer" && ground[2].cards.length === 2 && ground[2].cards[1].button_type === "slider", "pop-up lights changed, their design kept");
+  check(lovelace.backups.length === 1, "backup before changing");
+
+  // The kitchen from the areas, into the "Begane grond" section by itself.
+  await rooms.locator(".chip", { hasText: "Keuken" }).click();
+  check(
+    (await rooms.getByRole("combobox", { name: "Sectie" }).first().locator("option:checked").innerText()) === "Begane grond",
+    "section follows the floor"
+  );
+  await rooms.getByRole("button", { name: "Op dashboard zetten" }).click();
+  await rooms.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(400);
+  lovelace = await tab.evaluate(() => window.__lovelace());
+  const cards = lovelace.dashboards.__main.views[0].sections[1].cards;
+  check(cards.some((c) => c.tap_action?.navigation_path === "#l-keuken"), "kitchen tile added");
+  check(cards.some((c) => popupHash(c) === "#l-keuken"), "kitchen pop-up added");
+  const kitchenTile = cards.find((c) => c.tap_action?.navigation_path === "#l-keuken");
+  check(
+    kitchenTile?.type === "custom:button-card" && kitchenTile.styles.card[0]["border-radius"] === "24px" &&
+      kitchenTile.name.includes(`const LIGHTS=["light.keuken"]`) && kitchenTile.name.includes("const NAME='Keuken'"),
+    "new room copies the design of the room already there"
+  );
+  const kitchenPopup = cards.find((c) => popupHash(c) === "#l-keuken");
+  check(kitchenPopup.type === "vertical-stack" && kitchenPopup.cards[1].button_type === "slider", "its pop-up copies the light cards too");
+
+  // A room that isn't an area.
+  await rooms.getByRole("button", { name: "Kamer toevoegen" }).click();
+  await rooms.getByRole("textbox", { name: "Naam" }).fill("Kantoor");
+  await rooms.getByRole("checkbox", { name: "Zolderlamp" }).check();
+  await rooms.getByRole("button", { name: "Op dashboard zetten" }).click();
+  await rooms.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(400);
+  check((await rooms.locator(".chip.active").innerText()).trim() === "Kantoor", "new room is then found and selected");
+
+  // Other cards: a greeting and scenes.
+  await rooms.getByRole("button", { name: "Toevoegen", exact: true }).click();
   await rooms.getByRole("button", { name: "Ja" }).click();
   await tab.waitForTimeout(300);
-  let lovelace = await tab.evaluate(() => window.__lovelace());
-  const view = lovelace.dashboards.__main.views.find((v) => v.path === "kamers");
-  check(Boolean(view) && view.type === "sections" && view.max_columns === 2, `view made with a column per floor (${view?.max_columns})`);
-  const cards = view.sections.flatMap((section) => section.cards);
-  check(cards.some((c) => c.tap_action?.navigation_path === "#l-woonkamer"), "tile opens #l-woonkamer");
-  const popup = cards.find((c) => c.type === "vertical-stack" && c.cards[0].hash === "#l-woonkamer");
-  check(popup?.cards.filter((c) => c.type === "tile").length === 2, "pop-up with both lights");
-  check(!JSON.stringify(view).includes("#l-zolder"), "left-out room not in the view");
-  check(lovelace.dashboards.__main.views.length === 3, "other views kept");
-  const backups = lovelace.backups.length;
-
-  await rooms.getByRole("button", { name: "Weergave maken" }).click();
-  check((await rooms.getByText(/bestaat al en wordt vervangen/).count()) === 1, "asks before replacing");
+  await rooms.getByRole("radio", { name: "Scènes" }).click();
+  await rooms.getByRole("checkbox", { name: "Avond" }).check();
+  await rooms.getByRole("button", { name: "Toevoegen", exact: true }).click();
   await rooms.getByRole("button", { name: "Ja" }).click();
   await tab.waitForTimeout(300);
   lovelace = await tab.evaluate(() => window.__lovelace());
-  check(lovelace.dashboards.__main.views.length === 3 && lovelace.backups.length === backups + 1, "replaced with a new backup");
+  const first = lovelace.dashboards.__main.views[0].sections[0].cards;
+  check(first.some((c) => c.type === "markdown" && c.content.includes("{{ user }}")), "greeting added");
+  check(first.some((c) => c.type === "grid" && c.cards[0].entity === "scene.avond"), "scenes added");
   check(errors.length === 0, `rooms: no errors ${errors.join(" | ")}`);
   if (shots) await tab.screenshot({ path: `${shots}/rooms.png` });
+
+  // A whole view from the areas still works.
+  await rooms.locator("summary", { hasText: "Complete weergave maken" }).click();
+  const view = rooms.locator("ss-rooms-view");
+  check((await view.locator(".floor").count()) === 3, "whole view: one card per floor");
+  await view.getByRole("button", { name: "Weergave maken" }).click();
+  await view.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(300);
+  lovelace = await tab.evaluate(() => window.__lovelace());
+  check(lovelace.dashboards.__main.views.some((v) => v.path === "kamers"), "whole view made");
+  check(lovelace.dashboards.__main.views.length === 3, "other views kept");
   await ctx.close();
 }
 

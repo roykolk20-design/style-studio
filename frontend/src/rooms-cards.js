@@ -3,6 +3,7 @@
 // Like the hand-made "Licht" view (see the brief, 2.4), with theme variables
 // instead of fixed colors.
 import { slug } from "./climate-cards.js";
+import { popupCard } from "./popup-format.js";
 
 export const OTHER = "__other";
 
@@ -107,23 +108,26 @@ function popup(room, style, labels) {
   for (const light of room.lights) {
     cards.push({ type: "tile", entity: light, features: [{ type: "light-brightness" }] });
   }
-  if (room.climate && room.climate_button) {
-    const hash = climateHash(room.name);
-    cards.push({
-      type: "custom:bubble-card",
-      card_type: "button",
-      button_type: "name",
-      entity: room.climate,
-      name: labels.climate,
-      icon: "mdi:air-conditioner",
-      show_state: true,
-      show_attribute: true,
-      attribute: "current_temperature",
-      tap_action: { action: "navigate", navigation_path: hash },
-      button_action: { tap_action: { action: "navigate", navigation_path: hash } },
-    });
-  }
-  return { type: "vertical-stack", cards };
+  if (room.climate && room.climate_button) cards.push(climateButton(room.climate, room.name, labels));
+  return popupCard(head, cards.slice(1));
+}
+
+/** A button in a room pop-up that opens the room's climate pop-up. */
+export function climateButton(entity, roomName, labels) {
+  const hash = climateHash(roomName);
+  return {
+    type: "custom:bubble-card",
+    card_type: "button",
+    button_type: "name",
+    entity,
+    name: labels.climate,
+    icon: "mdi:air-conditioner",
+    show_state: true,
+    show_attribute: true,
+    attribute: "current_temperature",
+    tap_action: { action: "navigate", navigation_path: hash },
+    button_action: { tap_action: { action: "navigate", navigation_path: hash } },
+  };
 }
 
 /** The whole view. `floors` holds { name, rooms: [room] } in order. */

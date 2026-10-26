@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
+import { setStandalone, standalone } from "./popup-format.js";
 import { translator } from "./strings.js";
 
 /**
@@ -116,6 +117,37 @@ export class TabBase extends LitElement {
             ${label}
           </button>`
         )}
+      </div>
+    `;
+  }
+
+  // New pop-ups in Bubble Card's standalone (3.2+) or legacy format.
+  _popupFormat() {
+    const current = standalone();
+    return html`
+      <div class="row">
+        <span>
+          ${this.t("pf_title")}
+          <small>${this.t("pf_hint")}</small>
+        </span>
+        <div class="segment small" role="radiogroup">
+          ${[
+            [true, this.t("pf_new")],
+            [false, this.t("pf_old")],
+          ].map(
+            ([value, label]) => html`<button
+              role="radio"
+              aria-checked=${current === value ? "true" : "false"}
+              class=${current === value ? "active" : ""}
+              @click=${() => {
+                setStandalone(value);
+                this.requestUpdate();
+              }}
+            >
+              ${label}
+            </button>`
+          )}
+        </div>
       </div>
     `;
   }

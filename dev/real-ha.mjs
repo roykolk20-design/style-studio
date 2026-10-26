@@ -41,7 +41,26 @@ function writeConfig() {
   const include = NAMED ? "!include_dir_named" : "!include_dir_merge_named";
   writeFileSync(
     `${config}configuration.yaml`,
-    ["default_config:", "", "frontend:", `  themes: ${include} themes`, ""].join("\n")
+    [
+      "default_config:",
+      "",
+      "frontend:",
+      `  themes: ${include} themes`,
+      "",
+      "# Lights, air conditioners and weather to test with.",
+      "demo:",
+      "",
+      "scene:",
+      "  - name: Avond",
+      "    icon: mdi:weather-sunset",
+      "    entities:",
+      "      light.bed_light: on",
+      "  - name: Ochtend",
+      "    icon: mdi:weather-sunny",
+      "    entities:",
+      "      light.kitchen_lights: on",
+      "",
+    ].join("\n")
   );
   const vars = [
     'primary-color: "#f59e0b"',
@@ -165,7 +184,134 @@ export async function start() {
   await addIntegration(auth.access_token, "style_studio");
   if (existsSync(`${config}custom_components/glass_sidebar`)) await addIntegration(auth.access_token, "glass_sidebar");
   await waitForPanel(auth.access_token);
+  await installCards(auth.access_token);
+  await seedDashboard(auth.access_token);
   return { ...auth, base: BASE, client: CLIENT };
+}
+
+// --- Dashboard cards, as on Roy's own Home Assistant ---------------------
+
+const CARDS = {
+  "button-card.js": "https://github.com/custom-cards/button-card/releases/latest/download/button-card.js",
+  "bubble-card.js": "https://raw.githubusercontent.com/Clooos/Bubble-Card/main/dist/bubble-card.js",
+};
+
+/** Calls websocket commands with a token; returns their results. */
+export async function ws(token, messages) {
+  const socket = new WebSocket(`${BASE.replace("http", "ws")}/api/websocket`);
+  const results = [];
+  await new Promise((resolve, reject) => {
+    let id = 0;
+    const next = () => {
+      if (id === messages.length) {
+        socket.close();
+        resolve();
+        return;
+      }
+      id += 1;
+      socket.send(JSON.stringify({ id, ...messages[id - 1] }));
+    };
+    socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.type === "auth_required") socket.send(JSON.stringify({ type: "auth", access_token: token }));
+      else if (msg.type === "auth_ok") next();
+      else if (msg.type === "result" && msg.id === id) {
+        results.push(msg.success ? msg.result : { error: msg.error });
+        next();
+      }
+    };
+    socket.onerror = reject;
+  });
+  return results;
+}
+
+// button-card and Bubble Card in /config/www, loaded as dashboard resources.
+async function installCards(token) {
+  mkdirSync(`${config}www`, { recursive: true });
+  for (const [file, url] of Object.entries(CARDS)) {
+    if (existsSync(`${config}www/${file}`)) continue;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`download ${file}: ${res.status}`);
+    writeFileSync(`${config}www/${file}`, Buffer.from(await res.arrayBuffer()));
+  }
+  const [resources] = await ws(token, [{ type: "lovelace/resources" }]);
+  const missing = Object.keys(CARDS).filter((file) => !resources.some((r) => r.url.includes(file)));
+  if (missing.length) {
+    await ws(
+      token,
+      missing.map((file) => ({ type: "lovelace/resources/create", res_type: "module", url: `/local/${file}` }))
+    );
+  }
+}
+
+// A "Licht" view like Roy's: hand-made room tiles with button-card JS
+// templates, and Bubble Card pop-ups, per floor.
+function handMadeRoom(name, icon, lights) {
+  const hash = `#l-${name.toLowerCase()}`;
+  return [
+    {
+      type: "custom:button-card",
+      name: `[[[ const LIGHTS=${JSON.stringify(lights).replace(/"/g, "'")}; const NAME='${name}'; const ICON='${icon}'; return NAME; ]]]`,
+      icon,
+      show_label: true,
+      label: `[[[ const LIGHTS=${JSON.stringify(lights).replace(/"/g, "'")}; const on = LIGHTS.filter((e) => states[e] && states[e].state === 'on').length; return on ? on + ' aan' : 'Uit'; ]]]`,
+      tap_action: { action: "navigate", navigation_path: hash },
+      styles: {
+        card: [{ "border-radius": "24px" }, { padding: "16px" }, { "background-color": "#fffaf2" }],
+        grid: [{ "grid-template-areas": '"i" "n" "l"' }, { "justify-items": "start" }],
+        icon: [{ color: "#44739e" }, { width: "28px" }],
+        name: [{ "font-weight": "600" }],
+      },
+    },
+    {
+      type: "vertical-stack",
+      cards: [
+        { type: "custom:bubble-card", card_type: "pop-up", hash, name, icon },
+        ...lights.map((entity) => ({
+          type: "custom:bubble-card",
+          card_type: "button",
+          button_type: "slider",
+          entity,
+        })),
+      ],
+    },
+  ];
+}
+
+/** The "Licht" view; `fresh` puts it back even when it is there already. */
+export async function seedDashboard(token, fresh = false) {
+  const [current] = await ws(token, [{ type: "lovelace/config", url_path: null }]);
+  if (!fresh && current && !current.error && current.views?.some((view) => view.path === "licht")) return;
+  const config = {
+    views: [
+      {
+        title: "Licht",
+        path: "licht",
+        type: "sections",
+        max_columns: 4,
+        sections: [
+          { type: "grid", cards: [{ type: "heading", heading: "Thuis" }] },
+          {
+            type: "grid",
+            cards: [
+              { type: "heading", heading: "Begane grond" },
+              ...handMadeRoom("Woonkamer", "mdi:sofa", ["light.ceiling_lights", "light.living_room_rgbww_lights"]),
+              ...handMadeRoom("Keuken", "mdi:fridge", ["light.kitchen_lights"]),
+            ],
+          },
+          {
+            type: "grid",
+            cards: [
+              { type: "heading", heading: "1e verdieping" },
+              ...handMadeRoom("Slaapkamer", "mdi:bed", ["light.bed_light"]),
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const [saved] = await ws(token, [{ type: "lovelace/config/save", url_path: null, config }]);
+  if (saved?.error) throw new Error(`seed dashboard: ${saved.error.message}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

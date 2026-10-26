@@ -169,6 +169,9 @@
   light("light.keuken", "Keukenlamp", "on");
   light("light.slaapkamer", "Slaapkamerlamp", "off");
   light("light.zolder", "Zolderlamp", "off");
+  states["scene.avond"] = { entity_id: "scene.avond", state: "2026-10-26T18:00:00", attributes: { friendly_name: "Avond", icon: "mdi:weather-sunset" } };
+  states["scene.ochtend"] = { entity_id: "scene.ochtend", state: "2026-10-26T07:00:00", attributes: { friendly_name: "Ochtend", icon: "mdi:weather-sunny" } };
+  states["weather.thuis"] = { entity_id: "weather.thuis", state: "sunny", attributes: { friendly_name: "Thuis", temperature: 12 } };
   const floors = {
     begane_grond: { floor_id: "begane_grond", name: "Begane grond", level: 0, icon: "mdi:home-floor-0" },
     eerste: { floor_id: "eerste", name: "1e verdieping", level: 1, icon: "mdi:home-floor-1" },
@@ -191,8 +194,26 @@
   const dashboards = {
     __main: {
       views: [
+        // Like Roy's "Licht" view: hand-made room tiles with JS templates and
+        // Bubble Card pop-ups, per floor.
         { title: "Licht", path: "licht", type: "sections", max_columns: 4,
-          sections: [{ type: "grid", cards: [{ type: "heading", heading: "Thuis" }] }] },
+          sections: [
+            { type: "grid", cards: [{ type: "heading", heading: "Thuis" }] },
+            { type: "grid", cards: [
+              { type: "heading", heading: "Begane grond" },
+              { type: "custom:button-card",
+                name: "[[[ const LIGHTS=['light.woonkamer_plafond', 'light.woonkamer_staande']; const NAME='Woonkamer'; const ICON='mdi:sofa'; return NAME; ]]]",
+                icon: "mdi:sofa",
+                tap_action: { action: "navigate", navigation_path: "#l-woonkamer" },
+                styles: { card: [{ "border-radius": "24px" }, { padding: "16px" }] } },
+              { type: "vertical-stack", cards: [
+                { type: "custom:bubble-card", card_type: "pop-up", hash: "#l-woonkamer", name: "Woonkamer", icon: "mdi:sofa" },
+                { type: "custom:bubble-card", card_type: "button", entity: "light.woonkamer_plafond", name: "Plafond", button_type: "slider" },
+                { type: "custom:bubble-card", card_type: "button", entity: "light.woonkamer_staande", name: "Staand", button_type: "slider" },
+              ] },
+            ] },
+            { type: "grid", cards: [{ type: "heading", heading: "1e verdieping" }] },
+          ] },
         // Hand-made cards with fixed colors and corners, like the real ones.
         { title: "Energie", path: "energie", cards: [
           { type: "custom:button-card", name: "Batterij",

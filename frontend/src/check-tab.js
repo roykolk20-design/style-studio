@@ -1,4 +1,5 @@
 import { css, html, nothing } from "lit";
+import { live } from "lit/directives/live.js";
 import { TabBase } from "./tab-base.js";
 import { listDashboards, loadDashboard, saveDashboard } from "./dashboards.js";
 import { applySuggestions, scanDashboard, themeColors } from "./fixed-styles.js";
@@ -161,7 +162,9 @@ class CheckTab extends TabBase {
     const c = this._check;
     const sidebarCardMod = c.card_mod_themes.filter((t) => t.sidebar);
     const otherCardMod = c.card_mod_themes.filter((t) => !t.sidebar);
-    const old = c.devices.filter((d) => d.version !== c.version);
+    // Devices seen in the last two weeks; older ones are likely not used.
+    const recent = Date.now() - 14 * 24 * 3600 * 1000;
+    const old = c.devices.filter((d) => d.version !== c.version && new Date(d.at).getTime() > recent);
     const browserMod = readStorage(BROWSER_MOD_KEY) === "true";
     return html`
       <div class="card">
@@ -246,7 +249,7 @@ class CheckTab extends TabBase {
               type="checkbox"
               aria-label=${f.value}
               ?disabled=${!f.suggestion}
-              .checked=${this._chosen.has(key)}
+              .checked=${live(this._chosen.has(key))}
               @change=${(ev) => this._toggle(key, ev.target.checked)}
             />
             ${f.kind === "color"

@@ -107,14 +107,34 @@ export class CardPreview extends LitElement {
           </div>`;
         }
         return html`<div class="pill">
-          <span class="round"><ha-icon .icon=${card.icon ?? "mdi:circle"}></ha-icon></span>
-          <b>${card.name}</b>
+          <span class="round"><ha-icon .icon=${card.icon ?? entity?.attributes?.icon ?? "mdi:lightbulb"}></ha-icon></span>
+          <b>${card.name ?? entity?.attributes?.friendly_name ?? card.entity}</b>
           <small>${entity ? entity.attributes?.[card.attribute] ?? entity.state : ""}${card.attribute === "current_temperature" ? "°" : ""}</small>
         </div>`;
       case "tile":
         return html`<div class="tile ${entity?.state === "on" ? "on" : ""}">
           <span class="round"><ha-icon .icon=${entity?.attributes?.icon ?? "mdi:lightbulb"}></ha-icon></span>
           <span><b>${card.name ?? entity?.attributes?.friendly_name ?? card.entity}</b><small>${entity?.state ?? ""}</small></span>
+        </div>`;
+      case "markdown": {
+        // Templates can't run here; show the text with "…" for live values.
+        const lines = String(card.content ?? "")
+          .replace(/\{%[\s\S]*?%\}/g, "")
+          .replace(/\{\{[\s\S]*?\}\}/g, "…")
+          .split("\n")
+          .filter((line) => line.trim());
+        return html`<div class="markdown">
+          ${lines.map((line) =>
+            line.startsWith("#")
+              ? html`<b class="md-title">${line.replace(/^#+\s*/, "")}</b>`
+              : html`<span>${line.replace(/\*\*/g, "")}</span>`
+          )}
+        </div>`;
+      }
+      case "weather-forecast":
+        return html`<div class="tile weather">
+          <span class="round"><ha-icon icon="mdi:weather-partly-cloudy"></ha-icon></span>
+          <span><b>${entity?.attributes?.friendly_name ?? card.entity}</b><small>${entity ? `${entity.state} · ${entity.attributes?.temperature ?? ""}°` : ""}</small></span>
         </div>`;
       default:
         return html`<div class="unknown">${card.type}</div>`;
@@ -292,6 +312,21 @@ export class CardPreview extends LitElement {
 
     .tile.on .round {
       color: var(--state-light-active-color, var(--primary-color));
+    }
+
+    .markdown {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 12px;
+      border-radius: var(--ha-card-border-radius, 12px);
+      background: var(--ha-card-background, var(--card-background-color));
+      border: 1px solid var(--divider-color);
+      font-size: 13px;
+    }
+
+    .md-title {
+      font-size: 18px;
     }
 
     .unknown {

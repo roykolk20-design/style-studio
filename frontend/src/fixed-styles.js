@@ -33,6 +33,18 @@ function toHex(value) {
   return rgb ? `#${rgb.slice(1, 4).map((n) => Number(n).toString(16).padStart(2, "0")).join("")}` : null;
 }
 
+// Home Assistant's own default colors. A card with one of these written in
+// it (often the default blue) can point to the variable instead.
+const HA_DEFAULTS = {
+  "#44739e": "state-icon-color",
+  "#03a9f4": "primary-color",
+  "#ff9800": "accent-color",
+  "#fdd835": "state-light-active-color",
+  "#212121": "primary-text-color",
+  "#727272": "secondary-text-color",
+  "#fafafa": "primary-background-color",
+};
+
 /** "#f59e0b" → "primary-color", from the theme this screen uses now. */
 export function themeColors(root = document.documentElement) {
   const style = getComputedStyle(root);
@@ -40,6 +52,10 @@ export function themeColors(root = document.documentElement) {
   for (const name of COLOR_VARS) {
     const hex = toHex(style.getPropertyValue(`--${name}`));
     if (hex && !map.has(hex)) map.set(hex, name);
+  }
+  // The theme in use comes first; HA's defaults only fill the gaps.
+  for (const [hex, name] of Object.entries(HA_DEFAULTS)) {
+    if (!map.has(hex)) map.set(hex, name);
   }
   return map;
 }

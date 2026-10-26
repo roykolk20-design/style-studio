@@ -16,6 +16,8 @@ export async function listDashboards(hass, defaultTitle) {
   try {
     const list = await hass.callWS({ type: "lovelace/dashboards/list" });
     for (const item of list) {
+      // Newer versions list the main dashboard too; it is already first.
+      if (!item.url_path || item.url_path === "lovelace") continue;
       dashboards.push({
         url_path: item.url_path,
         title: item.title || item.url_path,

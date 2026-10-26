@@ -1,345 +1,504 @@
 import { css, html, nothing } from "lit";
+import { live } from "lit/directives/live.js";
+import { repeat } from "lit/directives/repeat.js";
 import { TabBase } from "./tab-base.js";
 import "./card-preview.js";
-import { slug } from "./climate-cards.js";
+import "./rooms-view.js";
 import { NEEDED_CARDS } from "./climate-tab.js";
+import { popupContent } from "./popup-format.js";
+import { addCards, cardAt, findRooms, roomLike, sectionsOf, updateRoom } from "./dashboard-cards.js";
 import { listDashboards, loadDashboard, saveDashboard } from "./dashboards.js";
-import {
-  climateHash,
-  defaultRoom,
-  floorsWithAreas,
-  roomPopup,
-  roomTile,
-  roomsView,
-} from "./rooms-cards.js";
+import { greetingCard, scenesCard, statusCard, weatherCard } from "./other-cards.js";
+import { areaEntities, climateButton, roomHash, roomPopup, roomTile } from "./rooms-cards.js";
 
-/** Room tiles and pop-ups per floor, as one view on a dashboard. */
+const NEW = "new";
+const POPUP_STYLE = { glass: false, opacity: 80, width_desktop: 540, margin_top_mobile: 20, show_header: true };
+
+/**
+ * Rooms and other cards on your own dashboards: find the rooms already there
+ * (also hand-made ones) and change them in place, add new rooms to a section,
+ * and add other cards. A whole new view is still possible at the bottom.
+ */
 class RoomsTab extends TabBase {
   static properties = {
     ...TabBase.properties,
-    _settings: { state: true },
-    _rooms: { state: true },
-    _order: { state: true },
     _dashboards: { state: true },
     _dashboard: { state: true },
+    _config: { state: true },
     _selected: { state: true },
-    _open: { state: true },
+    _draft: { state: true },
+    _place: { state: true },
+    _filter: { state: true },
+    _other: { state: true },
+    _model: { state: true },
   };
+
+  constructor() {
+    super();
+    this._filter = "";
+    this._other = { kind: "greeting", scenes: [], view: 0, section: 0 };
+  }
 
   connectedCallback() {
     super.connectedCallback();
-    const floors = floorsWithAreas(this.hass, this.t("rm_other"));
-    this._order = Object.fromEntries(floors.map((floor) => [floor.id, [...floor.areas]]));
-    this._floorNames = Object.fromEntries(floors.map((floor) => [floor.id, floor.name]));
-    this._rooms = Object.fromEntries(
-      Object.values(this.hass.areas ?? {}).map((area) => [area.area_id, defaultRoom(this.hass, area)])
-    );
-    this._settings = {
-      title: this.t("tab_rooms").split(" ")[0],
-      path: "kamers",
-      popup: { glass: false, opacity: 80, width_desktop: 540, margin_top_mobile: 20, show_header: true },
-    };
-    this._open = null;
     this._loadDashboards();
   }
 
-  async _loadDashboards() {
-    this._dashboards = await listDashboards(this.hass, this.hass.localize("panel.states") || "Overview");
-    this._dashboard = (this._dashboards.find((d) => d.editable) ?? this._dashboards[0])?.url_path ?? null;
+  get _lang() {
+    return (this.hass?.locale?.language || this.hass?.language || "nl").startsWith("nl") ? "nl" : "en";
   }
 
   get _labels() {
     return { on: this.t("rm_on"), off: this.t("rm_off"), climate: this.t("rm_climate_label") };
   }
 
-  _floors() {
-    return Object.entries(this._order).map(([id, areas]) => ({
-      id,
-      name: this._floorNames[id],
-      rooms: areas.map((areaId) => this._rooms[areaId]).filter((room) => room?.include),
-    }));
+  async _loadDashboards() {
+    this._dashboards = await listDashboards(this.hass, this.hass.localize("panel.states") || "Overview");
+    const first = this._dashboards.find((d) => d.editable) ?? this._dashboards[0];
+    if (first) await this._pickDashboard(first.url_path);
   }
 
-  _room(areaId, changes) {
-    this._rooms = { ...this._rooms, [areaId]: { ...this._rooms[areaId], ...changes } };
+  async _pickDashboard(urlPath, select) {
+    this._dashboard = urlPath;
+    try {
+      this._config = await loadDashboard(this.hass, urlPath);
+    } catch (err) {
+      this._config = { views: [] };
+    }
+    this._place = { view: 0, section: 0 };
+    this._other = { ...this._other, view: 0, section: 0 };
+    const rooms = this._found();
+    // New rooms look like the first room already there, unless you pick otherwise.
+    this._model = rooms[0]?.hash ?? null;
+    this._choose(select ?? (rooms[0] ? `found:${rooms[0].hash}` : NEW));
   }
 
-  _move(floorId, index, step) {
-    const areas = [...this._order[floorId]];
-    const to = index + step;
-    if (to < 0 || to >= areas.length) return;
-    [areas[index], areas[to]] = [areas[to], areas[index]];
-    this._order = { ...this._order, [floorId]: areas };
+  _found() {
+    return this._config ? findRooms(this._config) : [];
   }
 
-  _setPopup(key, value) {
-    this._settings = { ...this._settings, popup: { ...this._settings.popup, [key]: value } };
+  // Areas whose room isn't on this dashboard yet, as a start for a new room.
+  _suggestions() {
+    const taken = new Set(this._found().map((room) => room.hash));
+    return Object.values(this.hass.areas ?? {})
+      .filter((area) => !taken.has(roomHash(area.name)))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  _create() {
-    const dashboard = this._dashboards.find((d) => d.url_path === this._dashboard);
-    const { title, path } = this._settings;
-    this._run(async () => {
-      const old = await loadDashboard(this.hass, dashboard.url_path);
-      const exists = (old.views ?? []).some((view) => view.path === path);
-      this._ask(this.t(exists ? "rm_replace_confirm" : "rm_create_confirm", { title }), () =>
-        this._run(async () => {
-          const config = JSON.parse(JSON.stringify(old));
-          config.views ??= [];
-          const view = roomsView(this._settings, this._floors(), this._labels);
-          const index = config.views.findIndex((v) => v.path === path);
-          if (index === -1) config.views.push(view);
-          else config.views[index] = view;
-          await saveDashboard(this.hass, dashboard.url_path, old, config);
-        }, this.t("rm_created", { title }))
-      );
+  _choose(key) {
+    this._selected = key;
+    this._toast = null;
+    if (key.startsWith("found:")) {
+      const room = this._found().find((r) => `found:${r.hash}` === key);
+      this._draft = { name: room.name, icon: room.icon, lights: [...room.lights], climate: room.climate };
+      return;
+    }
+    if (key.startsWith("area:")) {
+      const area = this.hass.areas[key.slice(5)];
+      const { lights, climate } = areaEntities(this.hass, area.area_id);
+      this._draft = { name: area.name, icon: area.icon || "mdi:home-outline", lights, climate };
+      this._place = { ...this._place, section: this._sectionForFloor(area.floor_id) };
+      return;
+    }
+    this._draft = { name: this.t("rm_new_room"), icon: "mdi:home-outline", lights: [], climate: null };
+  }
+
+  // A new room from an area goes into the section named after its floor.
+  _sectionForFloor(floorId) {
+    const floor = this.hass.floors?.[floorId]?.name?.toLowerCase();
+    const sections = sectionsOf(this._config.views?.[this._place.view]);
+    const match = sections.find((s) => floor && s.label.toLowerCase() === floor);
+    return match?.index ?? sections[0]?.index ?? 0;
+  }
+
+  get _room() {
+    return this._selected?.startsWith("found:")
+      ? this._found().find((r) => `found:${r.hash}` === this._selected)
+      : null;
+  }
+
+  _set(key, value) {
+    this._draft = { ...this._draft, [key]: value };
+    this._toast = null;
+  }
+
+  get dirty() {
+    const room = this._room;
+    if (!room || !this._draft) return false;
+    return JSON.stringify(this._draft) !== JSON.stringify({ name: room.name, icon: room.icon, lights: room.lights, climate: room.climate });
+  }
+
+  // What the changed room looks like: the dashboard's own cards, changed.
+  _changedConfig() {
+    const room = this._room;
+    const d = this._draft;
+    return updateRoom(this._config, room, {
+      name: d.name,
+      icon: d.icon,
+      lights: d.lights,
+      climate: d.climate,
+      climateCard: d.climate ? climateButton(d.climate, d.name, this._labels) : null,
     });
   }
 
-  render() {
-    if (!Object.keys(this.hass.areas ?? {}).length) {
-      return html`<p class="intro">${this.t("rooms_intro")}</p>
-        <div class="card"><p class="hint">${this.t("no_areas")}</p></div>`;
+  _newRoom() {
+    const d = this._draft;
+    return { ...d, include: true, climate_button: Boolean(d.climate) };
+  }
+
+  // The cards for a new room: like the model room, or Style Studio's own.
+  _newCards(config = this._config) {
+    const room = this._newRoom();
+    const model = findRooms(config).find((r) => r.hash === this._model);
+    if (model) {
+      const climateCard = room.climate ? climateButton(room.climate, room.name, this._labels) : null;
+      return roomLike(config, model, { ...room, hash: roomHash(room.name) }, climateCard);
     }
-    const s = this._settings;
-    const p = s.popup;
+    return [roomTile(room, this._labels), roomPopup(room, POPUP_STYLE, this._labels)];
+  }
+
+  _placeLabel(view, section) {
+    const v = this._config.views[view];
+    const label = sectionsOf(v).find((s) => s.index === section)?.label ?? "";
+    return { view: v?.title ?? v?.path ?? `${view + 1}`, section: label };
+  }
+
+  _save() {
+    const room = this._room;
+    const dashboard = this._dashboards.find((d) => d.url_path === this._dashboard);
+    if (room) {
+      this._ask(this.t("rm_update_confirm", { name: this._draft.name }), () =>
+        this._run(async () => {
+          const old = await loadDashboard(this.hass, dashboard.url_path);
+          const changed = updateRoom(old, findRooms(old).find((r) => r.hash === room.hash), {
+            ...this._draft,
+            climateCard: this._draft.climate ? climateButton(this._draft.climate, this._draft.name, this._labels) : null,
+          });
+          await saveDashboard(this.hass, dashboard.url_path, old, changed);
+          await this._pickDashboard(dashboard.url_path, `found:${room.hash}`);
+        }, this.t("rm_update_done"))
+      );
+      return;
+    }
+    const hash = roomHash(this._draft.name);
+    if (this._found().some((r) => r.hash === hash)) {
+      this._showToast(this.t("rm_hash_taken", { hash }));
+      return;
+    }
+    const where = this._placeLabel(this._place.view, this._place.section);
+    this._ask(this.t("rm_put_confirm", { name: this._draft.name, ...where }), () =>
+      this._run(async () => {
+        const old = await loadDashboard(this.hass, dashboard.url_path);
+        const changed = addCards(old, this._place.view, this._place.section, this._newCards(old));
+        await saveDashboard(this.hass, dashboard.url_path, old, changed);
+        await this._pickDashboard(dashboard.url_path, `found:${hash}`);
+      }, this.t("rm_put_done"))
+    );
+  }
+
+  render() {
     const dashboards = this._dashboards ?? [];
     const dashboard = dashboards.find((d) => d.url_path === this._dashboard);
     return html`
       <p class="intro">${this.t("rooms_intro")}</p>
+      <div class="card">
+        <label class="row">
+          <span>${this.t("cl_dashboard")}</span>
+          <select @change=${(ev) => this._pickDashboard(ev.target.value || null)}>
+            ${dashboards.map(
+              (d) => html`<option value=${d.url_path ?? ""} ?selected=${d.url_path === this._dashboard}>${d.title}</option>`
+            )}
+          </select>
+        </label>
+        ${dashboard && !dashboard.editable ? this._warning(this.t("cl_readonly")) : nothing}
+      </div>
+      ${this._config && this._draft ? this._roomSection(dashboard) : nothing}
+      ${this._config ? this._otherCards(dashboard) : nothing}
+      <div class="card">
+        <details>
+          <summary><h2>${this.t("rm_whole_view")}</h2></summary>
+          <ss-rooms-view .hass=${this.hass} .narrow=${this.narrow}></ss-rooms-view>
+        </details>
+      </div>
+      ${this._bar({ onCancel: () => this._choose(this._selected), onSave: () => this._save() })}
+    `;
+  }
+
+  _roomSection(dashboard) {
+    const found = this._found();
+    const room = this._room;
+    const d = this._draft;
+    return html`
+      <div class="chips">
+        ${found.map(
+          (r) => html`<button
+            class="chip ${this._selected === `found:${r.hash}` ? "active" : ""}"
+            @click=${() => this._choose(`found:${r.hash}`)}
+          >
+            <ha-icon .icon=${r.icon}></ha-icon>${r.name}
+          </button>`
+        )}
+        ${found.length ? nothing : html`<span class="hint">${this.t("rm_no_rooms_found")}</span>`}
+        ${this._suggestions().map(
+          (area) => html`<button
+            class="chip suggestion ${this._selected === `area:${area.area_id}` ? "active" : ""}"
+            title=${this.t("rm_from_area")}
+            @click=${() => this._choose(`area:${area.area_id}`)}
+          >
+            <ha-icon icon="mdi:plus"></ha-icon>${area.name}
+          </button>`
+        )}
+        <button class="chip add ${this._selected === NEW ? "active" : ""}" @click=${() => this._choose(NEW)}>
+          <ha-icon icon="mdi:plus"></ha-icon>${this.t("rm_add_room")}
+        </button>
+      </div>
+
       <div class="layout">
         <div class="settings">
           <div class="card">
-            <h2>${this.t("rm_view")}</h2>
+            <h2>${this.t("rm_room")}</h2>
+            ${room ? html`<p class="hint">${this.t("rm_keeps_design")}</p>` : nothing}
             <label class="row">
-              <span>${this.t("cl_dashboard")}</span>
-              <select @change=${(ev) => (this._dashboard = ev.target.value || null)}>
-                ${dashboards.map(
-                  (d) => html`<option value=${d.url_path ?? ""} ?selected=${d.url_path === this._dashboard}>
-                    ${d.title}
-                  </option>`
-                )}
+              <span>${this.t("cl_name")}</span>
+              <input type="text" .value=${d.name} @input=${(ev) => this._set("name", ev.target.value)} />
+            </label>
+            <label class="row">
+              <span>${this.t("rm_icon")}</span>
+              <span class="inline">
+                <ha-icon .icon=${d.icon}></ha-icon>
+                <input
+                  type="text"
+                  .value=${d.icon}
+                  @change=${(ev) => /^mdi:[a-z0-9-]+$/.test(ev.target.value.trim()) && this._set("icon", ev.target.value.trim())}
+                />
+              </span>
+            </label>
+            <label class="row">
+              <span>${this.t("rm_climate_pick")}</span>
+              <select @change=${(ev) => this._set("climate", ev.target.value || null)}>
+                <option value="" ?selected=${!d.climate}>${this.t("rm_no_climate")}</option>
+                ${Object.keys(this.hass.states)
+                  .filter((id) => id.startsWith("climate."))
+                  .map(
+                    (id) => html`<option value=${id} ?selected=${id === d.climate}>
+                      ${this.hass.states[id].attributes.friendly_name ?? id}
+                    </option>`
+                  )}
               </select>
             </label>
-            ${dashboard && !dashboard.editable ? this._warning(this.t("cl_readonly")) : nothing}
-            <label class="row">
-              <span>${this.t("rm_title")}</span>
+            <div class="row column">
+              <span>${this.t("rm_lights_pick")} (${d.lights.length})</span>
               <input
                 type="text"
-                .value=${s.title}
-                @input=${(ev) => (this._settings = { ...s, title: ev.target.value })}
+                placeholder=${this.t("rm_filter")}
+                aria-label=${this.t("rm_filter")}
+                .value=${this._filter}
+                @input=${(ev) => (this._filter = ev.target.value.toLowerCase())}
               />
-            </label>
-            <label class="row">
-              <span>${this.t("rm_path")}</span>
-              <input
-                type="text"
-                .value=${s.path}
-                @change=${(ev) => (this._settings = { ...s, path: slug(ev.target.value) || "kamers" })}
-              />
-            </label>
+              ${this._lightList()}
+            </div>
           </div>
 
           <div class="card">
-            <h2>${this.t("rm_popups")}</h2>
-            <div class="segment" role="radiogroup">
-              ${[
-                [false, this.t("rm_solid")],
-                [true, this.t("rm_glass")],
-              ].map(
-                ([glass, label]) => html`<button
-                  role="radio"
-                  aria-checked=${p.glass === glass ? "true" : "false"}
-                  class=${p.glass === glass ? "active" : ""}
-                  @click=${() => this._setPopup("glass", glass)}
-                >
-                  ${label}
-                </button>`
-              )}
-            </div>
-            ${p.glass ? this._popupSlider("opacity", this.t("rm_opacity"), 30, 100, "%") : nothing}
-            ${this._popupSlider("width_desktop", this.t("rm_width"), 360, 900, "px")}
-            ${this._popupSlider("margin_top_mobile", this.t("rm_height"), 0, 60, "%")}
-            <label class="row">
-              <span>${this.t("rm_header")}</span>
-              <input
-                type="checkbox"
-                class="switch"
-                .checked=${p.show_header}
-                @change=${(ev) => this._setPopup("show_header", ev.target.checked)}
-              />
-            </label>
+            <h2>${this.t("rm_where")}</h2>
+            ${room
+              ? html`<p class="hint">${this.t("rm_is_at", this._placeLabel(room.popup.view, room.popup.section))}</p>`
+              : html`${this._placePicker(this._place, (place) => (this._place = place))} ${this._designPicker()}`}
+            <button
+              class="primary"
+              ?disabled=${this._busy || !dashboard?.editable || (room && !this.dirty) || !d.name.trim()}
+              @click=${this._save}
+            >
+              ${room ? this.t("rm_update") : this.t("rm_put")}
+            </button>
           </div>
-
-          ${Object.entries(this._order).map(([floorId, areas]) => this._floorCard(floorId, areas))}
-
-          <button
-            class="primary create"
-            ?disabled=${this._busy || !dashboard?.editable || !this._floors().some((f) => f.rooms.length)}
-            @click=${this._create}
-          >
-            ${this.t("rm_create")}
-          </button>
         </div>
 
         <aside class="card preview">
           <h2>${this.t("preview")}</h2>
-          ${this._preview()}
+          ${this._roomPreview()}
         </aside>
       </div>
-      ${this._bar({})}
     `;
   }
 
-  _popupSlider(key, label, min, max, unit) {
-    const p = this._settings.popup;
-    return html`
-      <label class="row slider">
-        <span>${label}</span>
-        <span class="inline">
-          <input
-            type="range"
-            min=${min}
-            max=${max}
-            step="1"
-            .value=${String(p[key])}
-            @input=${(ev) => this._setPopup(key, Number(ev.target.value))}
-          />
-          <output>${p[key]}${unit}</output>
-        </span>
-      </label>
-    `;
-  }
-
-  _floorCard(floorId, areas) {
-    return html`
-      <div class="card floor" data-floor=${this._floorNames[floorId]}>
-        <h2>${this._floorNames[floorId]}</h2>
-        ${areas.map((areaId, index) => {
-          const room = this._rooms[areaId];
-          return html`
-            <div class="room ${room.include ? "" : "off"}">
-              <input
-                type="checkbox"
-                aria-label="${this.t("rm_include")} ${room.name}"
-                .checked=${room.include}
-                @change=${(ev) => this._room(areaId, { include: ev.target.checked })}
-              />
-              <ha-icon .icon=${room.icon}></ha-icon>
-              <div class="fields">
-                <input
-                  type="text"
-                  aria-label=${this.t("cl_name")}
-                  .value=${room.name}
-                  @input=${(ev) => this._room(areaId, { name: ev.target.value })}
-                />
-                <input
-                  type="text"
-                  class="icon-field"
-                  aria-label=${this.t("rm_icon")}
-                  .value=${room.icon}
-                  @change=${(ev) =>
-                    /^mdi:[a-z0-9-]+$/.test(ev.target.value.trim()) &&
-                    this._room(areaId, { icon: ev.target.value.trim() })}
-                />
-                <details>
-                  <summary>
-                    ${room.lights.length === 1
-                      ? this.t("rm_light_one")
-                      : room.lights.length
-                        ? this.t("rm_lights", { count: room.lights.length })
-                        : this.t("rm_no_lights")}
-                  </summary>
-                  ${this._lightChoices(areaId, room)}
-                </details>
-                ${room.climate
-                  ? html`<label class="climate">
-                      <input
-                        type="checkbox"
-                        .checked=${room.climate_button}
-                        @change=${(ev) => this._room(areaId, { climate_button: ev.target.checked })}
-                      />
-                      ${this.t("rm_climate")}
-                      <small>${this.t("rm_climate_hint", { hash: climateHash(room.name) })}</small>
-                    </label>`
-                  : nothing}
-              </div>
-              <span class="moves">
-                <button class="icon" title=${this.t("move_up")} ?disabled=${index === 0} @click=${() => this._move(floorId, index, -1)}>
-                  <ha-icon icon="mdi:arrow-up"></ha-icon>
-                </button>
-                <button
-                  class="icon"
-                  title=${this.t("move_down")}
-                  ?disabled=${index === areas.length - 1}
-                  @click=${() => this._move(floorId, index, 1)}
-                >
-                  <ha-icon icon="mdi:arrow-down"></ha-icon>
-                </button>
-              </span>
-            </div>
-          `;
-        })}
-      </div>
-    `;
-  }
-
-  // Any light can be added; the area's own lights are checked by default.
-  _lightChoices(areaId, room) {
+  _lightList() {
+    const d = this._draft;
     const all = Object.keys(this.hass.states)
       .filter((id) => id.startsWith("light."))
-      .sort();
+      .map((id) => ({ id, name: this.hass.states[id].attributes.friendly_name ?? id }))
+      .filter((l) => !this._filter || l.name.toLowerCase().includes(this._filter) || l.id.includes(this._filter) || d.lights.includes(l.id))
+      // A steady order: rows must not move under the pointer while you tick them.
+      .sort((a, b) => a.name.localeCompare(b.name));
     return html`<div class="lights">
-      ${all.map(
-        (id) => html`<label>
+      ${repeat(
+        all,
+        (l) => l.id,
+        (l) => html`<label>
           <input
             type="checkbox"
-            .checked=${room.lights.includes(id)}
+            .checked=${live(d.lights.includes(l.id))}
             @change=${(ev) =>
-              this._room(areaId, {
-                lights: ev.target.checked ? [...room.lights, id] : room.lights.filter((l) => l !== id),
-              })}
+              this._set("lights", ev.target.checked ? [...d.lights, l.id] : d.lights.filter((x) => x !== l.id))}
           />
-          ${this.hass.states[id].attributes.friendly_name ?? id}
+          ${l.name}
         </label>`
       )}
     </div>`;
   }
 
-  _preview() {
-    const floors = this._floors().filter((floor) => floor.rooms.length);
-    const open = floors.flatMap((f) => f.rooms).find((room) => room.name === this._open) ?? null;
+  _designPicker() {
+    const found = this._found();
     return html`
-      <div class="columns">
-        ${floors.map(
-          (floor) => html`<div class="column">
-            <div class="floor-name">${floor.name}</div>
-            ${floor.rooms.map(
-              (room) => html`<button class="pick" @click=${() => (this._open = room.name)}>
-                <ss-card-preview
-                  bare
-                  .hass=${this.hass}
-                  .t=${this.t}
-                  .needs=${NEEDED_CARDS}
-                  .config=${roomTile(room, this._labels)}
-                ></ss-card-preview>
-              </button>`
-            )}
+      <label class="row">
+        <span>${this.t("rm_design")}</span>
+        <select @change=${(ev) => (this._model = ev.target.value || null)}>
+          ${found.map(
+            (r) => html`<option value=${r.hash} ?selected=${r.hash === this._model}>${this.t("rm_like", { name: r.name })}</option>`
+          )}
+          <option value="" ?selected=${!this._model}>${this.t("rm_standard")}</option>
+        </select>
+      </label>
+      ${this._model ? nothing : this._popupFormat()}
+    `;
+  }
+
+  _placePicker(place, set) {
+    const views = this._config.views ?? [];
+    const sections = sectionsOf(views[place.view]);
+    return html`
+      <label class="row">
+        <span>${this.t("cl_view")}</span>
+        <select @change=${(ev) => set({ view: Number(ev.target.value), section: sectionsOf(views[Number(ev.target.value)])[0]?.index ?? 0 })}>
+          ${views.map((v, index) => html`<option value=${index} ?selected=${index === place.view}>${v.title ?? v.path ?? index + 1}</option>`)}
+        </select>
+      </label>
+      ${views[place.view]?.type === "sections"
+        ? html`<label class="row">
+            <span>${this.t("rm_section")}</span>
+            <select @change=${(ev) => set({ ...place, section: Number(ev.target.value) })}>
+              ${sections.map((s) => html`<option value=${s.index} ?selected=${s.index === place.section}>${s.label}</option>`)}
+            </select>
+          </label>`
+        : nothing}
+    `;
+  }
+
+  // An existing room shows its own cards, changed; a new one the generated cards.
+  _roomPreview() {
+    let tile;
+    let popupCards;
+    const room = this._room;
+    if (room) {
+      const changed = this._changedConfig();
+      tile = room.tile ? cardAt(changed, room.tile) : null;
+      const popup = cardAt(changed, room.popup);
+      popupCards = popupContent(popup);
+    } else {
+      const cards = this._newCards();
+      tile = cards.length === 2 ? cards[0] : null;
+      popupCards = popupContent(cards.at(-1));
+    }
+    return html`
+      ${tile
+        ? html`<div class="tile-preview">
+            <ss-card-preview bare .hass=${this.hass} .t=${this.t} .needs=${NEEDED_CARDS} .config=${tile}></ss-card-preview>
           </div>`
-        )}
-      </div>
-      ${open
-        ? html`<div class="popup-title">
-              <ha-icon .icon=${open.icon}></ha-icon><b>${open.name}</b>
-              <button class="icon" @click=${() => (this._open = null)}><ha-icon icon="mdi:close"></ha-icon></button>
+        : nothing}
+      <div class="popup-title"><ha-icon .icon=${this._draft.icon}></ha-icon><b>${this._draft.name}</b></div>
+      <ss-card-preview
+        .hass=${this.hass}
+        .t=${this.t}
+        .needs=${NEEDED_CARDS}
+        .config=${{ type: "vertical-stack", cards: popupCards }}
+      ></ss-card-preview>
+    `;
+  }
+
+  _otherConfig() {
+    const o = this._other;
+    const weather = Object.keys(this.hass.states).find((id) => id.startsWith("weather."));
+    switch (o.kind) {
+      case "scenes":
+        return o.scenes.length ? scenesCard(o.scenes) : null;
+      case "status":
+        return statusCard(this._lang);
+      case "weather":
+        return weather ? weatherCard(weather) : null;
+      default:
+        return greetingCard(this._lang, weather);
+    }
+  }
+
+  _addOther() {
+    const dashboard = this._dashboards.find((d) => d.url_path === this._dashboard);
+    const o = this._other;
+    const card = this._otherConfig();
+    const where = this._placeLabel(o.view, o.section);
+    this._ask(this.t("oc_add_confirm", { card: this.t(`oc_${o.kind}`), ...where }), () =>
+      this._run(async () => {
+        const old = await loadDashboard(this.hass, dashboard.url_path);
+        await saveDashboard(this.hass, dashboard.url_path, old, addCards(old, o.view, o.section, [card]));
+        this._config = await loadDashboard(this.hass, dashboard.url_path);
+      }, this.t("oc_added"))
+    );
+  }
+
+  _otherCards(dashboard) {
+    const o = this._other;
+    const scenes = Object.keys(this.hass.states).filter((id) => id.startsWith("scene.")).sort();
+    const card = this._otherConfig();
+    return html`
+      <div class="card">
+        <h2>${this.t("oc_title")}</h2>
+        <p class="hint">${this.t("oc_hint")}</p>
+        <div class="layout">
+          <div>
+            <div class="segment" role="radiogroup">
+              ${["greeting", "scenes", "status", "weather"].map(
+                (kind) => html`<button
+                  role="radio"
+                  aria-checked=${o.kind === kind ? "true" : "false"}
+                  class=${o.kind === kind ? "active" : ""}
+                  @click=${() => (this._other = { ...o, kind })}
+                >
+                  ${this.t(`oc_${kind}`)}
+                </button>`
+              )}
             </div>
-            <ss-card-preview
-              .hass=${this.hass}
-              .t=${this.t}
-              .needs=${NEEDED_CARDS}
-              .config=${{ type: "vertical-stack", cards: roomPopup(open, this._settings.popup, this._labels).cards.slice(1) }}
-            ></ss-card-preview>`
-        : html`<p class="hint">${this.t("rm_pick_room")}</p>`}
+            ${o.kind === "scenes"
+              ? scenes.length
+                ? html`<div class="lights">
+                    ${scenes.map(
+                      (id) => html`<label>
+                        <input
+                          type="checkbox"
+                          .checked=${live(o.scenes.includes(id))}
+                          @change=${(ev) =>
+                            (this._other = {
+                              ...o,
+                              scenes: ev.target.checked ? [...o.scenes, id] : o.scenes.filter((s) => s !== id),
+                            })}
+                        />
+                        ${this.hass.states[id].attributes.friendly_name ?? id}
+                      </label>`
+                    )}
+                  </div>`
+                : html`<p class="hint">${this.t("oc_no_scenes")}</p>`
+              : nothing}
+            ${o.kind === "weather" && !card ? html`<p class="hint">${this.t("oc_no_weather")}</p>` : nothing}
+            ${this._placePicker(o, (place) => (this._other = { ...o, ...place }))}
+            <button class="primary" ?disabled=${this._busy || !card || !dashboard?.editable} @click=${this._addOther}>
+              ${this.t("oc_add")}
+            </button>
+          </div>
+          <div>
+            ${card
+              ? html`<ss-card-preview .hass=${this.hass} .t=${this.t} .needs=${[]} .config=${card}></ss-card-preview>`
+              : nothing}
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -348,7 +507,7 @@ class RoomsTab extends TabBase {
     css`
       select {
         font: inherit;
-        max-width: 220px;
+        max-width: 240px;
         padding: 6px 8px;
         border-radius: 8px;
         border: 1px solid var(--divider-color);
@@ -356,129 +515,84 @@ class RoomsTab extends TabBase {
         color: var(--primary-text-color);
       }
 
-      .room {
+      .chips {
         display: flex;
-        align-items: flex-start;
-        gap: 10px;
-        padding: 10px 0;
-        border-top: 1px solid var(--divider-color);
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 16px;
       }
 
-      .room.off .fields,
-      .room.off > ha-icon {
-        opacity: 0.45;
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--divider-color);
+        background: var(--card-background-color);
       }
 
-      .room > input[type="checkbox"] {
-        margin-top: 10px;
-        accent-color: var(--primary-color);
+      .chip.suggestion {
+        border-style: dashed;
+        color: var(--secondary-text-color);
       }
 
-      .room > ha-icon {
-        margin-top: 6px;
+      .chip.add {
         color: var(--primary-color);
       }
 
-      .fields {
-        flex: 1;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px 10px;
-        align-items: center;
+      .chip.active {
+        border-color: var(--primary-color);
+        border-style: solid;
+        color: var(--primary-text-color);
+        background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background-color));
       }
 
-      .fields > input[type="text"] {
-        flex: 1;
-        min-width: 140px;
-      }
-
-      .fields .icon-field {
-        flex: 0 1 170px;
-        font-size: 13px;
-      }
-
-      details {
-        flex-basis: 100%;
-        font-size: 13px;
-      }
-
-      summary {
-        cursor: pointer;
-        color: var(--secondary-text-color);
+      .row.column {
+        flex-direction: column;
+        align-items: stretch;
       }
 
       .lights {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
         gap: 4px 12px;
-        margin-top: 6px;
+        max-height: 260px;
+        overflow-y: auto;
+        margin: 6px 0;
+        font-size: 14px;
       }
 
-      .lights label,
-      .climate {
+      .lights label {
         display: flex;
         align-items: center;
         gap: 6px;
-        font-size: 13px;
       }
 
-      .climate {
-        flex-basis: 100%;
-        flex-wrap: wrap;
+      .lights input,
+      .lights label input {
+        accent-color: var(--primary-color);
       }
 
-      .climate small {
-        margin: 0;
-      }
-
-      .moves {
-        display: flex;
-      }
-
-      .icon {
-        display: inline-flex;
-        padding: 6px;
-        border-radius: 50%;
-      }
-
-      .create {
-        margin-bottom: 16px;
-      }
-
-      .columns {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 12px;
-      }
-
-      .column {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-
-      .floor-name {
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--secondary-text-color);
-      }
-
-      .pick {
-        padding: 0;
-        text-align: start;
+      .tile-preview {
+        max-width: 220px;
+        margin-bottom: 12px;
       }
 
       .popup-title {
         display: flex;
         align-items: center;
         gap: 8px;
-        margin: 16px 0 8px;
+        margin-bottom: 8px;
       }
 
-      .popup-title button {
-        margin-inline-start: auto;
+      details summary {
+        cursor: pointer;
+        list-style: none;
+      }
+
+      details summary h2 {
+        display: inline;
       }
     `,
   ];

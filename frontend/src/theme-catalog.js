@@ -124,11 +124,20 @@ export const GROUPS = [
     en: "States and icons",
     vars: [
       ["state-icon-color", "Icoon (uit)", "Icon (off)", "color"],
+      ["paper-item-icon-color", "Icoon in button-card en oudere kaarten", "Icon in button-card and older cards", "color"],
+      ["paper-item-icon-active-color", "Icoon aan in button-card en oudere kaarten", "Icon on in button-card and older cards", "color"],
+      ["state-icon-active-color", "Icoon aan", "Icon on", "color"],
       ["state-active-color", "Aan (algemeen)", "On (general)", "color"],
       ["state-light-active-color", "Lamp aan", "Light on", "color"],
       ["state-switch-active-color", "Schakelaar aan", "Switch on", "color"],
       ["state-fan-active-color", "Ventilator aan", "Fan on", "color"],
       ["state-cover-active-color", "Zonwering open", "Cover open", "color"],
+      ["state-input_boolean-active-color", "Hulpschakelaar aan", "Toggle helper on", "color"],
+      ["state-automation-active-color", "Automatisering aan", "Automation on", "color"],
+      ["state-script-active-color", "Script actief", "Script running", "color"],
+      ["state-binary_sensor-active-color", "Sensor actief", "Binary sensor on", "color"],
+      ["state-media_player-active-color", "Mediaspeler aan", "Media player on", "color"],
+      ["state-person-home-color", "Persoon thuis", "Person home", "color"],
       ["state-inactive-color", "Uit (algemeen)", "Off (general)", "color"],
       ["state-unavailable-color", "Niet beschikbaar", "Unavailable", "color"],
     ],
@@ -179,6 +188,8 @@ export const BASE_DEFAULTS = {
   sidebar: "#fbf6ec",
   // null: the same as the background.
   header: null,
+  // null: a quieter tone of the accent, so icons are never Home Assistant blue.
+  icon: null,
   radius: 16,
   shadow: "soft",
   // 100 is solid; lower lets the background show through cards.
@@ -285,6 +296,7 @@ export function derive(base) {
   const header = b.header ?? b.background;
   const card = alpha(b.card, b.card_opacity);
   const secondaryText = mix(b.text, b.background, 0.62);
+  const icon = b.icon ?? mix(b.accent, b.text, 0.6);
   const divider = mix(b.text, b.background, dark ? 0.16 : 0.12);
   const popup = b.popup === "glass" ? alpha(b.card, b.popup_opacity) : b.card;
   const soft = (color, amount) => mix(color, b.card, amount);
@@ -348,12 +360,23 @@ export function derive(base) {
     "input-label-ink-color": secondaryText,
     "code-editor-background-color": b.card,
 
-    "state-icon-color": secondaryText,
+    // Home Assistant's own default here is blue (#44739e); button-card and
+    // older cards read the paper-item variables instead.
+    "state-icon-color": icon,
+    "paper-item-icon-color": icon,
+    "paper-item-icon-active-color": b.accent,
+    "state-icon-active-color": b.accent,
     "state-active-color": b.accent,
     "state-light-active-color": b.accent,
     "state-switch-active-color": b.accent,
     "state-fan-active-color": b.accent,
     "state-cover-active-color": b.accent,
+    "state-input_boolean-active-color": b.accent,
+    "state-automation-active-color": b.accent,
+    "state-script-active-color": b.accent,
+    "state-binary_sensor-active-color": b.accent,
+    "state-media_player-active-color": b.accent,
+    "state-person-home-color": b.accent,
     "state-inactive-color": mix(b.text, b.background, 0.4),
     "state-unavailable-color": mix(b.text, b.background, 0.3),
 

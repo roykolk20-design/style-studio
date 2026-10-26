@@ -106,11 +106,13 @@ async function open(width, height, tabName = "Thema's") {
   await page.close();
 }
 
-// Rooms per floor with the living room pop-up open.
+// Rooms on your own dashboard: a hand-made room found and changed.
 {
   const { page, panel } = await open(1280, 800, "Kamers en pop-ups");
   const rooms = panel.locator("ss-rooms-tab");
-  await rooms.locator(".pick", { hasText: "Woonkamer" }).click();
+  // The hand-made living room on the dashboard, being changed.
+  await rooms.locator(".chip", { hasText: "Woonkamer" }).click();
+  await rooms.getByRole("checkbox", { name: "Keukenlamp" }).check();
   await page.waitForTimeout(400);
   await page.screenshot({ path: out("rooms.png") });
   await page.close();

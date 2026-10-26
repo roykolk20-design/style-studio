@@ -1,8 +1,10 @@
 import { css, html, nothing } from "lit";
+import { live } from "lit/directives/live.js";
 import { TabBase } from "./tab-base.js";
 import "./card-preview.js";
 import { capabilities, climateCards, defaultOptions, isOpener, isPopup } from "./climate-cards.js";
 import { listDashboards, loadDashboard, placeCards, saveDashboard } from "./dashboards.js";
+import { popupContent } from "./popup-format.js";
 
 export const NEEDED_CARDS = ["button-card", "bubble-card"];
 
@@ -191,7 +193,7 @@ class ClimateTab extends TabBase {
                   (mode) => html`<label class="mode">
                     <input
                       type="checkbox"
-                      .checked=${o.modes.includes(mode)}
+                      .checked=${live(o.modes.includes(mode))}
                       @change=${(ev) =>
                         this._set(
                           "modes",
@@ -244,7 +246,7 @@ class ClimateTab extends TabBase {
             .hass=${this.hass}
             .t=${this.t}
             .needs=${NEEDED_CARDS}
-            .config=${{ type: "vertical-stack", cards: popup.cards.slice(1) }}
+            .config=${{ type: "vertical-stack", cards: popupContent(popup) }}
           ></ss-card-preview>
         </aside>
       </div>
@@ -290,6 +292,7 @@ class ClimateTab extends TabBase {
         </label>
         ${panelView ? this._warning(this.t("cl_panel_view")) : nothing}
         ${this._switch(this._opts, "opener", this.t("cl_opener"))}
+        ${this._popupFormat()}
         <button
           class="primary place"
           ?disabled=${this._busy || !dashboard?.editable || !view || panelView}
