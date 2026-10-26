@@ -77,6 +77,10 @@ async def people_state(hass: HomeAssistant) -> dict[str, Any]:
         "persons": store.persons,
         "reports": sorted(store.reports.values(), key=lambda r: r["at"], reverse=True),
         "themes": sorted(loaded_themes(hass)),
+        # Our own themes that aren't in the list above, so the panel can say why.
+        "not_loaded": sorted(
+            theme["name"] for theme in store.themes if theme["name"] not in loaded_themes(hass)
+        ),
         "history": store.history_size(PEOPLE),
         "version": VERSION,
     }

@@ -201,7 +201,12 @@ class ThemesTab extends TabBase {
     }, this.t("saved_theme", { file: this._state.file }));
   }
 
+  get _nameOk() {
+    return /^[\p{L}\p{N}_][\p{L}\p{N}_ .()&+'-]*$/u.test((this._draft?.name ?? "").trim());
+  }
+
   _known(err) {
+    if (err?.code === "reload_failed") return new Error(this.t("err_reload_failed", { message: err.message }));
     const key = { file_exists: "err_file_exists", name_taken: "err_name_taken" }[err?.code];
     return key ? new Error(this.t(key)) : err;
   }
@@ -248,7 +253,7 @@ class ThemesTab extends TabBase {
         left: this._barButtons(),
         onCancel: () => this._cancel(),
         onSave: () => this._save(),
-        canSave: this._selected === NEW || this.dirty,
+        canSave: (this._selected === NEW || this.dirty) && this._nameOk,
       })}
     `;
   }
@@ -397,6 +402,7 @@ class ThemesTab extends TabBase {
                 }}
               />
             </label>
+            ${this._nameOk ? nothing : html`<p class="hint bad">${this.t("err_bad_name")}</p>`}
           </div>
 
           <div class="card">
@@ -857,6 +863,10 @@ class ThemesTab extends TabBase {
 
       .leaving button:not(.primary) {
         padding: 8px 12px;
+      }
+
+      .hint.bad {
+        color: var(--error-color);
       }
 
       .note {

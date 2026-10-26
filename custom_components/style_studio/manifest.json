@@ -1,13 +1,22 @@
 {
   "domain": "style_studio",
   "name": "Style Studio",
-  "codeowners": ["@roykolk20-design"],
+  "after_dependencies": [
+    "frontend",
+    "persistent_notification"
+  ],
+  "codeowners": [
+    "@roykolk20-design"
+  ],
   "config_flow": true,
-  "dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
+  "dependencies": [
+    "http",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/roykolk20-design/style-studio",
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/roykolk20-design/style-studio/issues",
   "single_config_entry": true,
-  "version": "0.5.0"
+  "version": "0.5.1"
 }

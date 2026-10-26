@@ -18,6 +18,8 @@ needs_glass = pytest.mark.skipif(not HAS_GLASS, reason="Glass Sidebar not availa
 
 async def _setup(hass: HomeAssistant, glass_options: dict | None = None) -> MockConfigEntry:
     assert await async_setup_component(hass, "http", {})
+    # Style Studio only uses the frontend when it's there, like in a real setup.
+    assert await async_setup_component(hass, "frontend", {})
     if glass_options is not None:
         glass = MockConfigEntry(domain="glass_sidebar", options=glass_options)
         glass.add_to_hass(hass)
@@ -168,3 +170,14 @@ def test_keeps_glass_category_icons() -> None:
         "collapsed": True,
     }
     assert to_options(sidebar, options)["categories"] == sidebar["categories"]
+
+
+async def test_starts_without_frontend(hass: HomeAssistant) -> None:
+    """When the frontend failed (for example by a bad theme file), Style Studio
+    still starts, to repair its theme files."""
+    assert await async_setup_component(hass, "http", {})
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    assert hass.data[DOMAIN]["frontend"] is False
+    assert await hass.config_entries.async_unload(entry.entry_id)

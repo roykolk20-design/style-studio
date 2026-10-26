@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.1]
+
+### Fixed
+
+- **Themes didn't appear with `themes: !include_dir_named themes`.** That
+  setting reads one theme per file, and Style Studio wrote all themes into one
+  file. Home Assistant then couldn't reload any theme, so a new theme never
+  showed up in Per persoon or in the profile; after a restart the whole
+  interface didn't start. Style Studio now reads configuration.yaml and writes
+  one file per theme ("<name>.yaml") for that setting, and one
+  style_studio.yaml for `!include_dir_merge_named`.
+- At start, files in the wrong format are rewritten (with a backup). Style
+  Studio now starts even when the frontend didn't, to do exactly that; restart
+  once more afterwards.
+- When Home Assistant can't load the themes after a save, the previous files
+  are put back and the panel shows Home Assistant's message.
+- Per persoon says which of your themes aren't loaded, and why they're missing.
+- Theme names are limited to characters that work as a file name.
+
 ## [0.5.0]
 
 All seven parts of the plan are in.

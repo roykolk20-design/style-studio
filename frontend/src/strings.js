@@ -154,6 +154,9 @@ const nl = {
   err_file_exists:
     "themes/style_studio.yaml bestaat al en is niet door Style Studio gemaakt. Hernoem of verwijder dat bestand eerst.",
   err_name_taken: "Er is al een thema met deze naam.",
+  err_reload_failed: "Home Assistant kon de thema's niet laden ({message}). Je vorige thema's staan weer terug.",
+  err_bad_name: "Gebruik in de naam alleen letters, cijfers, spaties en - _ ( ) & + '.",
+  people_not_loaded: "Deze thema's van Style Studio staan hier niet, omdat Home Assistant ze niet geladen heeft: {names}. Kijk bij Controle en herstel.",
   pv_title: "Thuis",
   pv_tab2: "Kamers",
   pv_living: "Woonkamer",
@@ -470,6 +473,9 @@ const en = {
   err_file_exists:
     "themes/style_studio.yaml already exists and wasn't made by Style Studio. Rename or remove that file first.",
   err_name_taken: "There is already a theme with this name.",
+  err_reload_failed: "Home Assistant couldn't load the themes ({message}). Your previous themes are back.",
+  err_bad_name: "Use only letters, digits, spaces and - _ ( ) & + ' in the name.",
+  people_not_loaded: "These Style Studio themes aren't listed because Home Assistant didn't load them: {names}. See Check and restore.",
   pv_title: "Home",
   pv_tab2: "Rooms",
   pv_living: "Living room",

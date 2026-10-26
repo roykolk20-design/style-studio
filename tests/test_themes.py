@@ -148,3 +148,91 @@ async def test_rejects_bad_themes(hass, hass_ws_client, config_dir, theme) -> No
     client = await hass_ws_client(hass)
     msg = await _send(client, type="style_studio/themes/save", theme=theme)
     assert msg["error"]["code"] == "invalid_format"
+
+
+NAMED_CONFIG = "frontend:\n  themes: !include_dir_named themes\n"
+
+
+async def test_named_layout(hass, hass_ws_client, tmp_path: Path) -> None:
+    """With !include_dir_named every file is one theme, named after the file."""
+    hass.config.config_dir = str(tmp_path)
+    (tmp_path / "configuration.yaml").write_text(NAMED_CONFIG, encoding="utf-8")
+    themes = tmp_path / "themes"
+    themes.mkdir()
+    (themes / "licht_warm.yaml").write_text('primary-color: "#f59e0b"\n', encoding="utf-8")
+    assert await async_setup_component(hass, "http", {})
+    assert await async_setup_component(hass, "frontend", {})
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    # A file from an older Style Studio in the merge format; this layout can't
+    # read it, and it made every theme reload fail.
+    (themes / "style_studio.yaml").write_text(MARKER + "\nOld:\n  primary-color: red\n", encoding="utf-8")
+    client = await hass_ws_client(hass)
+
+    state = (await _send(client, type="style_studio/themes/get"))["result"]
+    assert state["layout"] == "named"
+
+    msg = await _send(client, type="style_studio/themes/save", theme={**THEME, "name": "Joyce Roze"})
+    assert msg["success"], msg
+    assert msg["result"]["loaded"] == ["Joyce Roze"]
+    written = themes / "Joyce Roze.yaml"
+    assert written.read_text(encoding="utf-8").startswith(MARKER)
+    assert yaml_util.parse_yaml(written.read_text(encoding="utf-8"))["primary-color"] == "#e8749e"
+    assert not (themes / "style_studio.yaml").exists()
+    assert (themes / "licht_warm.yaml").exists()
+    assert "licht_warm" in msg["result"]["others"]
+
+    # The theme can now be picked for a person.
+    people = (await _send(client, type="style_studio/people/get"))["result"]
+    assert "Joyce Roze" in people["themes"]
+    assert people["not_loaded"] == []
+
+    theme_id = msg["result"]["theme"]["id"]
+    assert (await _send(client, type="style_studio/themes/delete", theme_id=theme_id))["success"]
+    assert not written.exists()
+
+
+async def test_reload_failure_puts_files_back(hass, hass_ws_client, config_dir) -> None:
+    # Someone else's broken theme file makes every reload fail.
+    (config_dir / "themes" / "broken.yaml").write_text("Broken: 5\n", encoding="utf-8")
+    client = await hass_ws_client(hass)
+
+    msg = await _send(client, type="style_studio/themes/save", theme=THEME)
+    assert msg["error"]["code"] == "reload_failed"
+    assert not (config_dir / "themes" / "style_studio.yaml").exists()
+    assert hass.data[DOMAIN]["store"].themes == []
+
+
+async def test_name_must_fit_a_file_name(hass, hass_ws_client, config_dir) -> None:
+    client = await hass_ws_client(hass)
+    msg = await _send(client, type="style_studio/themes/save", theme={**THEME, "name": "../etc"})
+    assert msg["error"]["code"] == "invalid_format"
+
+
+async def test_repairs_files_at_start(hass, tmp_path: Path) -> None:
+    """An older Style Studio left a merge-style file in a named setup; at the
+    next start it becomes one file per theme."""
+    hass.config.config_dir = str(tmp_path)
+    (tmp_path / "configuration.yaml").write_text(NAMED_CONFIG, encoding="utf-8")
+    themes = tmp_path / "themes"
+    themes.mkdir()
+    assert await async_setup_component(hass, "http", {})
+    assert await async_setup_component(hass, "frontend", {})
+    (themes / "style_studio.yaml").write_text(MARKER + "\nJoyce:\n  primary-color: red\n", encoding="utf-8")
+
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    # Style Studio's own store already knows the theme.
+    hass_storage_theme = {**THEME, "id": "abc"}
+    from custom_components.style_studio.store import StyleStore
+
+    store = StyleStore(hass)
+    await store.async_load()
+    await store.async_set_themes([hass_storage_theme])
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert not (themes / "style_studio.yaml").exists()
+    assert (themes / "Joyce.yaml").read_text(encoding="utf-8").startswith(MARKER)
+    assert "Joyce" in hass.data["frontend_themes"]

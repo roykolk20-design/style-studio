@@ -3,7 +3,7 @@
 # Style Studio for Home Assistant
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
-![Version](https://img.shields.io/badge/version-0.5.0-F59E0B)
+![Version](https://img.shields.io/badge/version-0.5.1-F59E0B)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.10%2B-18BCF2)
 
 Set the look of your whole Home Assistant from one panel: menu, top bar, cards,
@@ -91,13 +91,20 @@ each lives in its own repository and installs on its own.
 
 ### Before you start
 
-Home Assistant must load themes from the `themes` folder. Most setups already
-do; if not, add this to `configuration.yaml` and restart:
+Home Assistant must load themes from a folder. Most setups already do; if not,
+add this to `configuration.yaml` and restart:
 
 ```yaml
 frontend:
   themes: !include_dir_merge_named themes
 ```
+
+Both ways of loading a theme folder work, and Style Studio follows yours:
+
+- `!include_dir_merge_named themes`: all Style Studio themes go into
+  `themes/style_studio.yaml`.
+- `!include_dir_named themes`: every theme gets its own file,
+  `themes/<name>.yaml`, because that setting reads one theme per file.
 
 The panel warns when a saved theme isn't loaded.
 
@@ -279,6 +286,11 @@ against the real Glass Sidebar:
 docker build -t style-studio-test -f dev/Dockerfile.test dev
 docker run --rm -v "$PWD:/src:ro" -v "$PWD/../Home assistant setting bar:/glass:ro" style-studio-test
 ```
+
+`dev/real-ha.mjs` starts a real Home Assistant in Docker (port 8124) with
+Style Studio and Glass Sidebar, onboarded with a test user;
+`dev/real-ha-check.mjs` then makes a theme and picks it for a person in the
+real frontend. `THEMES_LAYOUT=named` switches to `!include_dir_named`.
 
 To release: raise the version in the three places `npm run check` names,
 update `CHANGELOG.md`, build, and push a tag `vX.Y.Z`.

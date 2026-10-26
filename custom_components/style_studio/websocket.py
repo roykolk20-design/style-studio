@@ -18,11 +18,12 @@ from .store import StyleStore
 from .themes import (
     THEME_SCHEMA,
     ForeignFileError,
+    ReloadError,
     async_write_themes,
     default_theme,
     flatten,
     loaded_themes,
-    themes_path,
+    theme_layout,
 )
 
 THEMES = "themes"
@@ -126,9 +127,9 @@ async def ws_sidebar_undo(
     connection.send_result(msg["id"], {"restored": previous is not None})
 
 
-@callback
-def _themes_state(hass: HomeAssistant) -> dict[str, Any]:
+async def _themes_state(hass: HomeAssistant) -> dict[str, Any]:
     store = _store(hass)
+    layout = await hass.async_add_executor_job(theme_layout, hass)
     ours = {theme["name"] for theme in store.themes}
     loaded = loaded_themes(hass)
     return {
@@ -141,7 +142,11 @@ def _themes_state(hass: HomeAssistant) -> dict[str, Any]:
         },
         "default_theme": default_theme(hass),
         "history": store.history_size(THEMES),
-        "file": str(themes_path(hass)),
+        "file": str(
+            layout.folder / "style_studio.yaml" if layout.mode == "merge" else layout.folder
+        ),
+        # How configuration.yaml includes themes: "merge", "named", or not found.
+        "layout": layout.mode if layout.found else None,
     }
 
 
@@ -159,6 +164,9 @@ async def _async_store_themes(
     except ForeignFileError as err:
         connection.send_error(msg["id"], "file_exists", f"Not made by Style Studio: {err}")
         return False
+    except ReloadError as err:
+        connection.send_error(msg["id"], "reload_failed", str(err))
+        return False
     except OSError as err:
         connection.send_error(msg["id"], "write_failed", str(err))
         return False
@@ -173,7 +181,7 @@ async def _async_store_themes(
 async def ws_themes_get(
     hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
 ) -> None:
-    connection.send_result(msg["id"], _themes_state(hass))
+    connection.send_result(msg["id"], await _themes_state(hass))
 
 
 @websocket_api.require_admin
@@ -196,7 +204,7 @@ async def ws_themes_save(
     theme["id"] = theme_id
     others = [t for t in themes if t["id"] != theme_id]
     taken = {t["name"].lower() for t in others} | {
-        name.lower() for name in _themes_state(hass)["others"]
+        name.lower() for name in (await _themes_state(hass))["others"]
     }
     if theme["name"].lower() in taken:
         connection.send_error(msg["id"], "name_taken", f"Theme {theme['name']} already exists")
@@ -208,7 +216,7 @@ async def ws_themes_save(
     else:
         themes[index] = theme
     if await _async_store_themes(hass, connection, msg, themes):
-        connection.send_result(msg["id"], {"theme": theme, **_themes_state(hass)})
+        connection.send_result(msg["id"], {"theme": theme, **(await _themes_state(hass))})
 
 
 @websocket_api.require_admin
@@ -224,7 +232,7 @@ async def ws_themes_delete(
         connection.send_error(msg["id"], "not_found", "No such theme")
         return
     if await _async_store_themes(hass, connection, msg, themes):
-        connection.send_result(msg["id"], _themes_state(hass))
+        connection.send_result(msg["id"], await _themes_state(hass))
 
 
 @websocket_api.require_admin
@@ -237,17 +245,17 @@ async def ws_themes_undo(
     store = _store(hass)
     previous = await store.async_pop_history(THEMES)
     if previous is None:
-        connection.send_result(msg["id"], {"restored": False, **_themes_state(hass)})
+        connection.send_result(msg["id"], {"restored": False, **(await _themes_state(hass))})
         return
     try:
         await async_write_themes(hass, previous)
-    except (ForeignFileError, OSError) as err:
+    except (ForeignFileError, ReloadError, OSError) as err:
         # Keep it in the history so the user can try again.
         await store.async_push_history(THEMES, previous)
         connection.send_error(msg["id"], "write_failed", str(err))
         return
     await store.async_set_themes(previous)
-    connection.send_result(msg["id"], {"restored": True, **_themes_state(hass)})
+    connection.send_result(msg["id"], {"restored": True, **(await _themes_state(hass))})
 
 
 @websocket_api.require_admin
@@ -265,4 +273,4 @@ async def ws_themes_set_default(
     await hass.services.async_call(
         "frontend", "set_theme", {"name": msg["name"]}, blocking=True
     )
-    connection.send_result(msg["id"], _themes_state(hass))
+    connection.send_result(msg["id"], await _themes_state(hass))

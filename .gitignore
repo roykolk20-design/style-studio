@@ -4,3 +4,4 @@ __pycache__/
 
 # Copied in by CI and the test image
 custom_components/glass_sidebar/
+dev/real-ha/

@@ -101,6 +101,9 @@ class PeopleTab extends TabBase {
     return html`
       <p class="intro">${this.t("people_intro")}</p>
       ${themes.length ? nothing : this._warning(this.t("no_themes_yet"))}
+      ${this._state.not_loaded?.length
+        ? this._warning(this.t("people_not_loaded", { names: this._state.not_loaded.join(", ") }))
+        : nothing}
       <div class="people">${users.map((user) => this._person(user))}</div>
       ${this._bar({
         left: this._state.history

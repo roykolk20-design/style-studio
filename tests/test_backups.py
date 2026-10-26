@@ -14,6 +14,8 @@ async def _send(client, **msg) -> dict:
 async def test_dashboard_backups(hass, hass_ws_client, tmp_path: Path) -> None:
     hass.config.config_dir = str(tmp_path)
     assert await async_setup_component(hass, "http", {})
+    # Style Studio only uses the frontend when it's there, like in a real setup.
+    assert await async_setup_component(hass, "frontend", {})
     entry = MockConfigEntry(domain=DOMAIN)
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)

@@ -13,7 +13,7 @@ from .const import DOMAIN, VERSION
 from .glass import GLASS_DOMAIN, glass_entry
 from .people import PEOPLE, SIGNAL_PERSONS
 from .store import StyleStore
-from .themes import ForeignFileError, async_write_themes, loaded_themes
+from .themes import ForeignFileError, ReloadError, async_write_themes, loaded_themes, theme_layout
 
 THEMES = "themes"
 KEYS = (THEMES, GLASS_DOMAIN, PEOPLE)
@@ -57,6 +57,7 @@ async def ws_check(
         glass_installed = False
 
     users = {user.id: user.name for user in await hass.auth.async_get_users()}
+    layout = await hass.async_add_executor_job(theme_layout, hass)
     connection.send_result(
         msg["id"],
         {
@@ -71,6 +72,7 @@ async def ws_check(
                 for name, theme in sorted(loaded.items())
                 if (keys := _card_mod_keys(theme))
             ],
+            "themes_layout": layout.mode if layout.found else None,
             "themes_not_loaded": [
                 theme["name"] for theme in store.themes if theme["name"] not in loaded
             ],
@@ -136,7 +138,7 @@ async def ws_history_restore(
     if key == THEMES:
         try:
             await async_write_themes(hass, value)
-        except (ForeignFileError, OSError) as err:
+        except (ForeignFileError, ReloadError, OSError) as err:
             connection.send_error(msg["id"], "write_failed", str(err))
             return
         await store.async_push_history(THEMES, store.themes)
