@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0]
+
+### New
+
+- **Rooms and pop-ups** tab: room tiles per floor from your areas and floors,
+  each opening a Bubble Card pop-up with its lights and, when there is one, a
+  button to the room's climate pop-up. Names, icons, lights, order, and solid
+  or glass pop-ups with width, phone height and header buttons. Makes one
+  view on a dashboard, a column per floor, after a backup; making it again
+  replaces only that view.
+
 ## [0.3.0]
 
 ### New

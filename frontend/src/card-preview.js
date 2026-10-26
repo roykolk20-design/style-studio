@@ -23,6 +23,8 @@ export class CardPreview extends LitElement {
     config: { attribute: false },
     needs: { attribute: false },
     t: { attribute: false },
+    // Only the card: no frame, label or warning (for small tiles).
+    bare: { type: Boolean },
     _real: { state: true },
     _missing: { state: true },
   };
@@ -46,6 +48,7 @@ export class CardPreview extends LitElement {
 
   render() {
     if (!this.config) return nothing;
+    if (this.bare) return this._real ?? this._draw(this.config);
     return html`
       ${this._missing?.length
         ? html`<p class="warning">${this.t("needs_cards", { cards: this._missing.join(", ") })}</p>`
@@ -72,15 +75,23 @@ export class CardPreview extends LitElement {
       case "heading":
         return html`<div class="title big">${card.heading}</div>`;
       case "custom:button-card": {
-        const active = (card.state ?? []).some(
-          (rule) => rule.operator === "template" && evaluate(rule.value, this.hass, entity)
+        const rule = (card.state ?? []).find(
+          (r) => r.operator === "template" && evaluate(r.value, this.hass, entity)
         );
+        // A rule that colors the whole card makes it "active" (climate
+        // buttons); one that only colors the icon makes it "lit" (rooms).
+        const active = rule ? (rule.styles?.card ? "active" : "lit") : "";
+        const room = (card.styles?.grid ?? []).some((r) => r["grid-template-areas"]);
         const style = (card.styles?.card ?? []).map((rule) => Object.entries(rule)[0]).filter(([key]) => key === "height");
         return html`<div
-          class="button ${active ? "active" : ""}"
+          class="button ${active} ${room ? "room" : ""}"
           style=${style.map(([key, value]) => `${key}:${value}`).join(";")}
         >
-          ${card.show_icon !== false && card.icon ? html`<ha-icon .icon=${card.icon}></ha-icon>` : nothing}
+          ${card.show_icon !== false && card.icon
+            ? room
+              ? html`<span class="room-icon"><ha-icon .icon=${card.icon}></ha-icon></span>`
+              : html`<ha-icon .icon=${card.icon}></ha-icon>`
+            : nothing}
           ${card.show_name !== false && card.name
             ? html`<span class="name ${card.styles?.name?.some((r) => r["font-size"] === "28px") ? "huge" : ""}">${evaluate(card.name, this.hass, entity)}</span>`
             : nothing}
@@ -192,6 +203,38 @@ export class CardPreview extends LitElement {
 
     .button.active small {
       color: inherit;
+    }
+
+    .button.room {
+      align-items: flex-start;
+      text-align: start;
+      min-height: 96px;
+      padding: 14px;
+      border-radius: var(--ha-card-border-radius, 16px);
+      background: var(--ha-card-background, var(--card-background-color));
+      border: 1px solid var(--divider-color);
+      font-weight: 600;
+    }
+
+    .button.room .room-icon {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--secondary-background-color);
+      color: var(--state-icon-color);
+      --mdc-icon-size: 22px;
+      margin-bottom: 6px;
+    }
+
+    .button.room.lit .room-icon {
+      background: var(--bubble-icon-background-color, var(--secondary-background-color));
+      color: var(--state-light-active-color);
+    }
+
+    .button.room small {
+      font-weight: 400;
     }
 
     .name.huge {

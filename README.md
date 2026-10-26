@@ -3,7 +3,7 @@
 # Style Studio for Home Assistant
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
-![Version](https://img.shields.io/badge/version-0.3.0-F59E0B)
+![Version](https://img.shields.io/badge/version-0.4.0-F59E0B)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.10%2B-18BCF2)
 
 Set the look of your whole Home Assistant from one panel: menu, top bar, cards,
@@ -46,6 +46,11 @@ each lives in its own repository and installs on its own.
   person to the next. It is applied when that person opens Home Assistant,
   once on each device, so they can still pick something else in their
   profile. The panel shows what each person uses now and when it was applied.
+- **Rooms and pop-ups**: room tiles per floor, each opening a pop-up with
+  its lights and an air conditioning button. Rooms, floors and lights come
+  from your areas in Home Assistant; pick names, icons, lights and order, and
+  solid or glass pop-ups. Style Studio makes one view of it, with a column per
+  floor on a wide screen; your other views stay as they are.
 - **Climate**: a pop-up per air conditioner with a big minus and plus for the
   temperature, buttons for the modes and fan speeds, and swing switches. Only
   what your air conditioner reports is offered; what's missing is explained.
@@ -69,9 +74,13 @@ each lives in its own repository and installs on its own.
 | --- | --- |
 | ![Per person](images/people.png) | ![Sidebar settings](images/sidebar.png) |
 
-| Climate | Phone |
+| Rooms and pop-ups | Climate |
 | --- | --- |
-| ![Climate pop-up](images/climate.png) | ![Phone](images/mobile.png) |
+| ![Rooms per floor](images/rooms.png) | ![Climate pop-up](images/climate.png) |
+
+| Phone |
+| --- |
+| ![Phone](images/mobile.png) |
 
 ## Installation
 
@@ -154,6 +163,23 @@ This needs a small script in every browser, which Style Studio adds by
 itself. It also tells the panel which version each device runs, so you can
 see when the companion app still uses old files.
 
+### Rooms and pop-ups
+
+The **Kamers en pop-ups** tab shows your floors with their areas. Each room
+gets a tile that shows how many lights are on, and a pop-up (`#l-<room>`)
+with a tile per light. When the room has an air conditioner, the pop-up gets a
+button to its climate pop-up (`#airco-<room>`, see below).
+
+Per room you can leave it out, rename it, change its icon, pick other lights
+and move it up or down. Pop-ups can be solid or glass, with their width on a
+desktop, the space above them on a phone, and the header buttons. Tap a tile
+in the preview to see its pop-up.
+
+**Weergave maken** adds one view (by default *Kamers*, address `kamers`) to
+the dashboard you pick, after a backup. Doing it again replaces that view;
+your other views are never touched. Rooms come from **Settings → Areas,
+labels & zones**, so assign your lights to areas and areas to floors first.
+
 ### Climate
 
 The **Klimaat** tab lists every `climate` entity. For each one, pick the name
@@ -185,7 +211,6 @@ colors are part of your theme either way.
 
 The panel already shows tabs for these; they arrive in later versions:
 
-- **Rooms and pop-ups**: room tiles and Bubble Card pop-ups from a few choices.
 - **Check and restore**: find conflicts such as card-mod sidebar styles, and
   restore backups.
 

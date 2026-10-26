@@ -68,6 +68,7 @@ async function open(width, query = "", tabName = "Zijbalk") {
     "Thema's": "ss-themes-tab .intro",
     "Per persoon": "ss-people-tab .intro",
     Klimaat: "ss-climate-tab .intro",
+    "Kamers en pop-ups": "ss-rooms-tab .intro",
   };
   await panel.locator(ready[tabName] ?? "ss-sidebar-tab .card").first().waitFor();
   await tab.waitForTimeout(300);
@@ -344,6 +345,53 @@ for (const width of [430, 1920]) {
   check(await climate.getByRole("button", { name: "Op dashboard zetten" }).isDisabled(), "panel view refused");
   check(errors.length === 0, `climate: no errors ${errors.join(" | ")}`);
   if (shots) await tab.screenshot({ path: `${shots}/climate.png` });
+  await ctx.close();
+}
+
+// Rooms: tiles per floor from areas, pop-ups with lights, a new view.
+{
+  const { ctx, tab, panel, errors } = await open(1920, "", "Kamers en pop-ups");
+  const rooms = panel.locator("ss-rooms-tab");
+  const floorText = async (name) => (await rooms.locator(`.floor[data-floor="${name}"]`).allInnerTexts()).join(" ");
+  check((await rooms.locator(".floor").count()) === 3, "one card per floor");
+  check((await rooms.locator('.floor[data-floor="Begane grond"] input[aria-label="Naam"]').count()) === 2, "living room and kitchen on the ground floor");
+  check((await floorText("Begane grond")).includes("2 lampen"), "lights found per area");
+  check((await floorText("Begane grond")).includes("#airco-woonkamer"), "air conditioning button links to the climate pop-up");
+
+  const preview = rooms.locator("aside");
+  check((await preview.getByText("1 aan").count()) === 2, "tiles count lights that are on");
+  await rooms.locator(".pick", { hasText: "Woonkamer" }).click();
+  check((await preview.getByText("Plafondlamp").count()) === 1, "pop-up shows the room's lights");
+  check((await preview.getByText("Airco", { exact: true }).count()) === 1, "pop-up has the air conditioning button");
+
+  await rooms.getByRole("checkbox", { name: "Meenemen Zolder" }).uncheck();
+  check(
+    (await preview.locator(".floor-name").allTextContents()).join() === "Begane grond,1e verdieping",
+    "left-out room leaves the preview"
+  );
+
+  await rooms.getByRole("button", { name: "Weergave maken" }).click();
+  await rooms.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(300);
+  let lovelace = await tab.evaluate(() => window.__lovelace());
+  const view = lovelace.dashboards.__main.views.find((v) => v.path === "kamers");
+  check(Boolean(view) && view.type === "sections" && view.max_columns === 2, `view made with a column per floor (${view?.max_columns})`);
+  const cards = view.sections.flatMap((section) => section.cards);
+  check(cards.some((c) => c.tap_action?.navigation_path === "#l-woonkamer"), "tile opens #l-woonkamer");
+  const popup = cards.find((c) => c.type === "vertical-stack" && c.cards[0].hash === "#l-woonkamer");
+  check(popup?.cards.filter((c) => c.type === "tile").length === 2, "pop-up with both lights");
+  check(!JSON.stringify(view).includes("#l-zolder"), "left-out room not in the view");
+  check(lovelace.dashboards.__main.views.length === 3, "other views kept");
+  const backups = lovelace.backups.length;
+
+  await rooms.getByRole("button", { name: "Weergave maken" }).click();
+  check((await rooms.getByText(/bestaat al en wordt vervangen/).count()) === 1, "asks before replacing");
+  await rooms.getByRole("button", { name: "Ja" }).click();
+  await tab.waitForTimeout(300);
+  lovelace = await tab.evaluate(() => window.__lovelace());
+  check(lovelace.dashboards.__main.views.length === 3 && lovelace.backups.length === backups + 1, "replaced with a new backup");
+  check(errors.length === 0, `rooms: no errors ${errors.join(" | ")}`);
+  if (shots) await tab.screenshot({ path: `${shots}/rooms.png` });
   await ctx.close();
 }
 

@@ -106,6 +106,16 @@ async function open(width, height, tabName = "Thema's") {
   await page.close();
 }
 
+// Rooms per floor with the living room pop-up open.
+{
+  const { page, panel } = await open(1280, 800, "Kamers en pop-ups");
+  const rooms = panel.locator("ss-rooms-tab");
+  await rooms.locator(".pick", { hasText: "Woonkamer" }).click();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: out("rooms.png") });
+  await page.close();
+}
+
 // Phone.
 {
   const { page, themes } = await open(430, 860);
