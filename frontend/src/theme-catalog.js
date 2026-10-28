@@ -168,6 +168,19 @@ export const GROUPS = [
     ],
   },
   {
+    key: "dashboard",
+    nl: "Dashboardpagina's",
+    en: "Dashboard pages",
+    vars: [
+      [
+        "lovelace-background",
+        "Achtergrond van alle pagina's (kleur, verloop of foto)",
+        "Background of all pages (color, gradient or photo)",
+        "text",
+      ],
+    ],
+  },
+  {
     key: "weather",
     nl: "Weerkaart",
     en: "Weather card",

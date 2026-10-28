@@ -3,7 +3,7 @@
 # Style Studio for Home Assistant
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
-![Version](https://img.shields.io/badge/version-0.7.0-F59E0B)
+![Version](https://img.shields.io/badge/version-0.8.0-F59E0B)
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.10%2B-18BCF2)
 
 Set the look of your whole Home Assistant from one panel: menu, top bar, cards,
@@ -53,6 +53,12 @@ each lives in its own repository and installs on its own.
   hand) go into the section you pick and copy the design of a room that's
   already there. Also a greeting, scenes, house status and weather card, or a
   whole view of rooms per floor at once.
+- **Backgrounds**: a photo, a color or a gradient behind a page of your
+  dashboard, on one page or on all of them. Upload a photo (big ones are
+  shrunk so the dashboard keeps loading fast), pick one you already have in
+  `/config/www`, make it darker or lighter so text stays readable, and see it
+  in the preview first. One background for every page at once is a theme
+  setting.
 - **Climate**: a pop-up per air conditioner with a big minus and plus for the
   temperature, buttons for the modes and fan speeds, and swing switches. Only
   what your air conditioner reports is offered; what's missing is explained.
@@ -85,9 +91,13 @@ each lives in its own repository and installs on its own.
 | --- | --- |
 | ![Rooms per floor](images/rooms.png) | ![Climate pop-up](images/climate.png) |
 
-| Check and restore | Phone |
+| Background for a page | Check and restore |
 | --- | --- |
-| ![Check and restore](images/check.png) | ![Phone](images/mobile.png) |
+| ![Background for a page](images/background.png) | ![Check and restore](images/check.png) |
+
+| Phone |
+| --- |
+| ![Phone](images/mobile.png) |
 
 ## Installation
 
@@ -212,6 +222,30 @@ backup of the dashboard first.
 in `cards:` instead of a vertical-stack). New pop-ups use that format; choose
 *Oud* under *Pop-up-vorm* for an older Bubble Card. Rooms in either format
 are found and changed.
+
+### Backgrounds
+
+Under **Kamers en pop-ups** choose **Een achtergrond instellen**:
+
+1. **Which page?** The pages of your dashboard; tick one, several, or all.
+   Pages that already have a background are marked.
+2. **Which background?** A **photo** (upload one, or pick a picture from the
+   list; photos in `/config/www` appear there by themselves), a **color**, a
+   **gradient**, or **no background** to remove it.
+3. **How should it look?** (photos) Cover, show whole or repeat; **darker or
+   lighter** with a slider; stay in place when you scroll; and where on the
+   screen it sits.
+4. **Save.** The dashboard is backed up first, and only the pages you ticked
+   change.
+
+Uploaded photos live in `config/style_studio/backgrounds/` and are served at
+`/style_studio_backgrounds/…`, without a login, like `/local`: browsers load a
+background before anything else. Don't upload anything private. Photos can be
+JPG, PNG, WEBP, GIF or AVIF up to 15 MB.
+
+For **all pages at once**, set `lovelace-background` in your theme (*Alles
+aanpassen › Dashboardpagina's*): a color, a gradient or `url(...)`. A page's own
+background wins over the theme's.
 
 ### Climate
 

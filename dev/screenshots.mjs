@@ -122,6 +122,20 @@ async function newTheme(themes, key, steps) {
   await page.close();
 }
 
+// A background for a page: a photo, in the preview.
+{
+  const { page, panel } = await open(1280, 800, "Kamers en pop-ups");
+  const rooms = panel.locator("ss-rooms-tab");
+  await rooms.locator('[data-choice="background"]').click();
+  const flow = rooms.locator("ss-background-flow");
+  await flow.locator(".tile").first().waitFor();
+  await next(flow);
+  await flow.getByRole("button", { name: "sunset.svg" }).click();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: out("background.png") });
+  await page.close();
+}
+
 // Check and restore, after searching the dashboards.
 {
   const { page, panel } = await open(1280, 800, "Controle en herstel");

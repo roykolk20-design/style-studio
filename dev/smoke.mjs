@@ -401,7 +401,7 @@ for (const width of [430, 1920]) {
   const begin = async (choice) => {
     await rooms.locator(`[data-choice="${choice}"]`).click();
   };
-  check((await rooms.locator(".choice").count()) === 4, "starts with four choices");
+  check((await rooms.locator(".choice").count()) === 5, "starts with five choices");
 
   // Change the hand-made living room.
   await begin("edit");
@@ -429,7 +429,7 @@ for (const width of [430, 1920]) {
   check(JSON.stringify(ground[1].styles) === JSON.stringify({ card: [{ "border-radius": "24px" }, { padding: "16px" }] }), "tile design kept");
   check(ground[2].cards[0].name === "Huiskamer" && ground[2].cards.length === 2 && ground[2].cards[1].button_type === "slider", "pop-up lights changed, their design kept");
   check(lovelace.backups.length === 1, "backup before changing");
-  check((await rooms.locator(".choice").count()) === 4, "back at the start after saving");
+  check((await rooms.locator(".choice").count()) === 5, "back at the start after saving");
 
   // The kitchen from the areas: goes under its floor's heading by itself.
   await begin("add");
@@ -503,6 +503,110 @@ for (const width of [430, 1920]) {
   lovelace = await tab.evaluate(() => window.__lovelace());
   check(lovelace.dashboards.__main.views.some((v) => v.path === "kamers"), "whole page made");
   check(lovelace.dashboards.__main.views.length === 3, "other pages kept");
+  await ctx.close();
+}
+
+// Backgrounds: a photo (chosen and uploaded), dimmed, on one page; a color on
+// all pages; a gradient; removed again; a photo deleted.
+{
+  const { ctx, tab, panel, errors } = await open(1920, "", "Kamers en pop-ups");
+  const rooms = panel.locator("ss-rooms-tab");
+  const flow = rooms.locator("ss-background-flow");
+  const next = () => flow.getByRole("button", { name: "Volgende" }).click();
+  const yes = () => flow.getByRole("button", { name: "Ja" }).click();
+  const pageStyle = () => flow.locator(".page").getAttribute("style");
+  const views = async () => (await tab.evaluate(() => window.__lovelace())).dashboards.__main.views;
+
+  await rooms.locator('[data-choice="background"]').click();
+  await flow.locator(".tile").first().waitFor();
+  check((await flow.locator(".tile").allInnerTexts()).join("|").includes("Licht"), "pages of the dashboard listed");
+  await next();
+
+  // A photo from the list shows in the preview.
+  await flow.getByRole("button", { name: "sunset.svg" }).click();
+  check((await pageStyle()).includes('url("/dev/photos/sunset.svg")'), "chosen photo in the preview");
+  check(!(await pageStyle()).includes("fixed"), "preview never pins the photo to the window");
+
+  // Upload one: it is shrunk or not, stored, listed and chosen by itself.
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  await flow.locator('input[type="file"]').setInputFiles({ name: "Strand.png", mimeType: "image/png", buffer: png });
+  await flow.getByRole("button", { name: "Strand.png", exact: true }).waitFor();
+  check((await tab.evaluate(() => window.__uploads())).length === 1, "photo uploaded");
+  check((await pageStyle()).includes("/dev/photos/uploaded.svg"), "uploaded photo is chosen");
+  check((await flow.getByText(/Foto staat klaar/).count()) === 1, "told the photo is ready");
+
+  // A file the server refuses is explained.
+  await flow.locator('input[type="file"]').setInputFiles({ name: "kapot.bad.png", mimeType: "image/png", buffer: png });
+  await flow.getByText(/geen foto die ik kan gebruiken/).waitFor();
+  check(true, "refused photo explained");
+
+  // Darker, shown whole; save on page one only.
+  await next();
+  await flow.locator('input[type="range"]').fill("-40");
+  check((await pageStyle()).includes("rgba(0, 0, 0, 0.4)"), "darker layer in the preview");
+  await next();
+  await flow.getByRole("button", { name: "Achtergrond zetten" }).click();
+  await yes();
+  await tab.waitForTimeout(400);
+  let v = await views();
+  check(
+    v[0].background?.includes('url("/dev/photos/uploaded.svg")') && v[0].background.includes("rgba(0, 0, 0, 0.4)") && v[0].background.includes("fixed"),
+    `photo background written (${v[0].background})`
+  );
+  check(v[1].background === undefined, "other pages untouched");
+  check((await tab.evaluate(() => window.__lovelace())).backups.length >= 1, "backup before saving");
+  check((await rooms.locator(".choice").count()) === 5, "back at the start afterwards");
+
+  // A color on all pages.
+  await rooms.locator('[data-choice="background"]').click();
+  await flow.getByRole("button", { name: "Alle pagina's" }).click();
+  await next();
+  await flow.locator('[data-kind="color"]').click();
+  await flow.getByRole("button", { name: "#2b2f36" }).click();
+  check((await pageStyle()).includes("#2b2f36"), "color in the preview");
+  await next();
+  await flow.getByRole("button", { name: "Achtergrond zetten" }).click();
+  await yes();
+  await tab.waitForTimeout(400);
+  v = await views();
+  check(v.every((x) => x.background === "#2b2f36"), "color on every page");
+
+  // A gradient preset on one page.
+  await rooms.locator('[data-choice="background"]').click();
+  await next();
+  await flow.locator('[data-kind="gradient"]').click();
+  await flow.getByRole("button", { name: "Oceaan" }).click();
+  await next();
+  await flow.getByRole("button", { name: "Achtergrond zetten" }).click();
+  await yes();
+  await tab.waitForTimeout(400);
+  v = await views();
+  check(v[0].background === "linear-gradient(160deg, #2193b0, #6dd5ed) fixed", `gradient written (${v[0].background})`);
+
+  // Remove it again.
+  await rooms.locator('[data-choice="background"]').click();
+  check((await flow.getByText("heeft al een achtergrond").count()) >= 1, "pages with a background are marked");
+  await next();
+  await flow.locator('[data-kind="none"]').click();
+  await next();
+  await flow.getByRole("button", { name: "Achtergrond weghalen" }).click();
+  await yes();
+  await tab.waitForTimeout(400);
+  v = await views();
+  check(v[0].background === undefined && v[1].background === "#2b2f36", "background removed from that page only");
+
+  // Delete the uploaded photo, after asking.
+  await rooms.locator('[data-choice="background"]').click();
+  await next();
+  await flow.getByRole("button", { name: "Foto verwijderen Strand.png" }).click();
+  check((await flow.getByText(/van de schijf/).count()) === 1, "asks before deleting a photo");
+  await yes();
+  await tab.waitForTimeout(300);
+  check((await flow.getByRole("button", { name: "Strand.png", exact: true }).count()) === 0, "photo deleted");
+  check((await flow.getByRole("button", { name: /Foto verwijderen sunset/ }).count()) === 0, "photos in /config/www can't be deleted here");
+
+  check(errors.length === 0, `background: no errors ${errors.join(" | ")}`);
+  if (shots) await tab.screenshot({ path: `${shots}/background.png` });
   await ctx.close();
 }
 

@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from . import websocket
+from . import backgrounds, websocket
 from .const import DOMAIN, PANEL_ELEMENT, PANEL_PATH, PANEL_URL, RUNTIME_URL, URL_BASE
 from .store import StyleStore
 from .themes import async_repair_themes
@@ -53,6 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             [StaticPathConfig(URL_BASE, str(Path(__file__).parent / "www"), False)]
         )
         websocket.async_register(hass)
+        await backgrounds.async_setup(hass)
         data["registered"] = True
 
     data["frontend"] = True

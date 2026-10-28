@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0]
+
+### New
+
+- **Backgrounds for pages.** Under *Kamers en pop-ups* › *Een achtergrond
+  instellen*: a photo, a color or a gradient on one, several or all pages of a
+  dashboard, with a preview, a slider to make a photo darker or lighter, and
+  the dashboard backed up first. Photos can be uploaded (big ones are shrunk to
+  2560 px first), or picked from `/config/www`; uploaded ones can be deleted
+  again, after asking.
+- The theme editor has `lovelace-background` (*Dashboardpagina's*) for one
+  background on every page.
+
 ## [0.7.0]
 
 ### Changed

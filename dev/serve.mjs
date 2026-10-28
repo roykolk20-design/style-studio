@@ -6,7 +6,12 @@ import { extname, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const types = { ".html": "text/html", ".js": "text/javascript", ".json": "application/json" };
+const types = {
+  ".html": "text/html",
+  ".js": "text/javascript",
+  ".json": "application/json",
+  ".svg": "image/svg+xml",
+};
 const port = Number(process.env.PORT || 8123);
 const glass = process.env.GLASS_SIDEBAR_DIR ||
   join(root, "..", "Home assistant setting bar", "custom_components", "glass_sidebar", "www");

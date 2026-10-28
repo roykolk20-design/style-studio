@@ -227,7 +227,26 @@
   const backups = [];
   window.__lovelace = () => ({ dashboards, backups });
 
+  // Background photos: two in /config/www, uploads added as they happen.
+  const photos = [
+    { name: "sunset.svg", url: "/dev/photos/sunset.svg", source: "www", size: 900 },
+    { name: "forest.svg", url: "/dev/photos/forest.svg", source: "www", size: 800 },
+  ];
+  const uploads = [];
+  window.__uploads = () => uploads;
+
   const hass = {
+    // Like the frontend's: a path on this Home Assistant, with the login added.
+    async fetchWithAuth(path, init = {}) {
+      const name = new URL(path, location.href).searchParams.get("name");
+      if (/\.bad\./.test(name)) {
+        return new Response(JSON.stringify({ message: "Not a picture of that type", code: "not_a_picture" }), { status: 400 });
+      }
+      uploads.push({ name, bytes: init.body?.size ?? 0 });
+      const url = "/dev/photos/uploaded.svg";
+      photos.unshift({ name, url, source: "upload", size: init.body?.size ?? 0 });
+      return new Response(JSON.stringify({ name, url }), { status: 200 });
+    },
     states,
     entities,
     devices: {},
@@ -246,6 +265,14 @@
         case "frontend/set_user_data":
           userSidebar = structuredClone(msg.value);
           return null;
+        case "style_studio/backgrounds/list":
+          return { photos: structuredClone(photos) };
+        case "style_studio/backgrounds/delete": {
+          const index = photos.findIndex((x) => x.name === msg.name && x.source === "upload");
+          if (index === -1) throw Object.assign(new Error("not found"), { code: "not_found" });
+          photos.splice(index, 1);
+          return null;
+        }
         case "lovelace/dashboards/list":
           return [{ url_path: "dashboard-plattegrond", title: "Plattegrond", mode: "storage" }];
         case "lovelace/config":

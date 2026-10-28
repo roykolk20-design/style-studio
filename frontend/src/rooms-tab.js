@@ -3,6 +3,7 @@ import { live } from "lit/directives/live.js";
 import { repeat } from "lit/directives/repeat.js";
 import { TabBase } from "./tab-base.js";
 import "./card-preview.js";
+import "./background-flow.js";
 import "./icon-picker.js";
 import "./rooms-view.js";
 import { NEEDED_CARDS } from "./climate-tab.js";
@@ -134,7 +135,8 @@ class RoomsTab extends TabBase {
   }
 
   get dirty() {
-    return Boolean(this._mode) && this._mode !== "page" && this._step > 0;
+    // Nothing happens to the dashboard until the last step, for these either.
+    return Boolean(this._mode) && !["page", "background"].includes(this._mode) && this._step > 0;
   }
 
   // --- the cards ------------------------------------------------------------
@@ -242,7 +244,17 @@ class RoomsTab extends TabBase {
     if (!this._mode) return this._startScreen();
     return html`
       ${this._back(this.t("back"), () => (this._mode = null))}
-      ${this._mode === "page"
+      ${this._mode === "background"
+        ? html`<ss-background-flow
+            .hass=${this.hass}
+            .narrow=${this.narrow}
+            @done=${async (ev) => {
+              this._mode = null;
+              await this._pickDashboard(this._dashboard);
+              this._showToast(ev.detail);
+            }}
+          ></ss-background-flow>`
+        : this._mode === "page"
         ? html`<div class="card"><ss-rooms-view .hass=${this.hass} .narrow=${this.narrow}></ss-rooms-view></div>`
         : html`<div class="layout">
             <div>${this._flow()}</div>
@@ -264,6 +276,7 @@ class RoomsTab extends TabBase {
           { key: "edit", icon: "mdi:pencil-outline", title: this.t("rm_do_edit"), text: this.t("rm_do_edit_text") },
           { key: "add", icon: "mdi:plus-box-outline", title: this.t("rm_do_add"), text: this.t("rm_do_add_text") },
           { key: "card", icon: "mdi:card-plus-outline", title: this.t("rm_do_card"), text: this.t("rm_do_card_text") },
+          { key: "background", icon: "mdi:image-outline", title: this.t("bg_do"), text: this.t("bg_do_text") },
           { key: "page", icon: "mdi:view-dashboard-outline", title: this.t("rm_do_page"), text: this.t("rm_do_page_text") },
         ],
         (mode) => this._start(mode)
